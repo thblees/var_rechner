@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VaR Rechner – Einzelwert & Portfolio</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; background: #F0F4F8; color: #2C3E50; min-height: 100vh; }
+
+/* ── Header ── */
+.header { background: linear-gradient(135deg, #1B2A4A 0%, #2C4A7C 100%); color: white; padding: 22px 36px; display: flex; align-items: center; gap: 14px; }
+.header h1 { font-size: 22px; font-weight: 700; }
+.header p { font-size: 12px; opacity: 0.75; margin-top: 3px; }
+
+/* ── Modus-Tabs ── */
+.mode-tabs { background: white; border-bottom: 2px solid #DDE3ED; padding: 0 36px; display: flex; gap: 0; }
+.tab-btn { padding: 14px 28px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; background: none; color: #7F8C8D; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+.tab-btn.active { color: #1B2A4A; border-bottom-color: #1B2A4A; }
+.tab-btn:hover:not(.active) { color: #2C3E50; background: #F8FAFC; }
+
+/* ── Eingabe-Panel ── */
+.input-panel { background: white; border-bottom: 1px solid #DDE3ED; padding: 18px 36px; }
+.input-row { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.input-group { display: flex; flex-direction: column; gap: 5px; }
+.input-group label { font-size: 11px; font-weight: 600; color: #5D6D7E; text-transform: uppercase; letter-spacing: 0.5px; }
+.input-group input, .input-group select { padding: 9px 12px; border: 2px solid #DDE3ED; border-radius: 7px; font-size: 14px; color: #2C3E50; outline: none; transition: border-color 0.2s; font-family: inherit; }
+.input-group input:focus, .input-group select:focus { border-color: #1B2A4A; }
+.input-ticker { width: 130px; font-weight: 700; text-transform: uppercase; }
+.input-betrag, .input-zeitraum { width: 140px; }
+
+/* Portfolio-Tabelle */
+.portfolio-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 12px; }
+.portfolio-table th { background: #F0F4F8; padding: 8px 10px; font-size: 11px; font-weight: 700; color: #5D6D7E; text-transform: uppercase; letter-spacing: 0.4px; text-align: left; }
+.portfolio-table td { padding: 6px 8px; border-bottom: 1px solid #EBF0F7; vertical-align: middle; }
+.portfolio-table input { padding: 7px 10px; border: 1px solid #DDE3ED; border-radius: 6px; font-size: 13px; font-family: inherit; width: 100%; outline: none; }
+.portfolio-table input:focus { border-color: #1B2A4A; }
+.ticker-inp { font-weight: 700; text-transform: uppercase; width: 90px !important; }
+.weight-inp { width: 70px !important; text-align: right; }
+.betrag-inp { width: 100px !important; text-align: right; }
+.weight-bar-cell { min-width: 120px; }
+.weight-bar { height: 6px; border-radius: 3px; background: #1B2A4A; transition: width 0.3s; }
+.weight-sum { font-size: 12px; padding: 4px 8px; border-radius: 5px; margin-left: 8px; font-weight: 700; }
+.weight-ok { background: #D5F5E3; color: #1E8449; }
+.weight-warn { background: #FDEDEC; color: #922B21; }
+.btn-add-row { padding: 7px 16px; background: #EBF0F7; border: 1px solid #DDE3ED; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; color: #1B2A4A; }
+.btn-add-row:hover { background: #C8D8F0; }
+.btn-del { background: none; border: none; color: #E74C3C; cursor: pointer; font-size: 16px; padding: 4px 8px; opacity: 0.6; }
+.btn-del:hover { opacity: 1; }
+
+/* Beispiel-Chips */
+.chips { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.chips span { font-size: 11px; color: #7F8C8D; }
+.chip { padding: 3px 9px; background: #EBF0F7; border-radius: 10px; font-size: 11px; color: #1B2A4A; cursor: pointer; border: 1px solid #DDE3ED; }
+.chip:hover { background: #C8D8F0; }
+
+/* Buttons */
+.btn-primary { padding: 10px 26px; background: #1B2A4A; color: white; border: none; border-radius: 7px; font-size: 14px; font-weight: 700; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+.btn-primary:hover { background: #2C4A7C; }
+.btn-primary:disabled { background: #95A5A6; cursor: not-allowed; }
+
+/* Status */
+.status-bar { padding: 10px 36px; font-size: 13px; display: none; align-items: center; gap: 10px; }
+.status-bar.loading { display: flex; background: #EBF2FB; color: #1B4F72; }
+.status-bar.error   { display: flex; background: #FDEDEC; color: #922B21; }
+.spinner { width: 16px; height: 16px; border: 3px solid #AED6F1; border-top-color: #1B4F72; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Ergebnis */
+.results { display: none; max-width: 1100px; margin: 0 auto; padding: 24px 18px; }
+.kpi-row { display: grid; gap: 12px; margin-bottom: 18px; }
+.kpi-row-5 { grid-template-columns: repeat(5,1fr); }
+.kpi-row-4 { grid-template-columns: repeat(4,1fr); }
+.kpi-card { background: white; border-radius: 9px; padding: 14px 12px; box-shadow: 0 2px 7px rgba(0,0,0,0.07); text-align: center; border-top: 4px solid #1B2A4A; }
+.kpi-label { font-size: 10px; color: #7F8C8D; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+.kpi-value { font-size: 19px; font-weight: 700; color: #1B2A4A; }
+.kpi-sub { font-size: 10px; color: #95A5A6; margin-top: 3px; }
+.risk-badge { display: inline-block; padding: 2px 9px; border-radius: 12px; color: white; font-size: 10px; font-weight: 700; }
+
+.card { background: white; border-radius: 9px; padding: 18px; box-shadow: 0 2px 7px rgba(0,0,0,0.07); margin-bottom: 18px; }
+.card-title { font-size: 14px; font-weight: 700; color: #1B2A4A; margin-bottom: 12px; padding-bottom: 7px; border-bottom: 2px solid #EBF0F7; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: #1B2A4A; color: white; padding: 9px 11px; text-align: center; font-size: 11px; font-weight: 600; }
+td { padding: 9px 11px; text-align: center; border-bottom: 1px solid #EBF0F7; }
+tr:nth-child(even) td { background: #F8FAFC; }
+tr:hover td { background: #EBF0F7; }
+td:first-child { font-weight: 700; text-align: left; color: #1B2A4A; }
+.c90 { color: #E67E22; font-weight: 700; }
+.c95 { color: #D35400; font-weight: 700; }
+.c99 { color: #C0392B; font-weight: 700; }
+.ccvar { color: #8E44AD; font-weight: 700; }
+
+.legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; font-size: 12px; }
+.legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+
+.info-box { background: #EBF0F7; border-radius: 7px; padding: 12px 14px; font-size: 12px; line-height: 1.7; margin-top: 12px; }
+.divi-box { background: #D5F5E3; border: 1px solid #82E0AA; border-radius: 7px; padding: 12px 14px; font-size: 13px; margin-bottom: 14px; }
+.disclaimer { background: #FFF9E6; border: 1px solid #F39C12; border-radius: 7px; padding: 10px 14px; font-size: 11px; color: #7D6608; margin-top: 16px; }
+
+/* ── Optimierungs-Sektion ── */
+.opt-card { background: white; border-radius: 9px; box-shadow: 0 2px 7px rgba(0,0,0,0.07); margin-bottom: 18px; overflow: hidden; }
+.opt-header { background: linear-gradient(135deg, #1A5276 0%, #2471A3 100%); color: white; padding: 14px 18px; display: flex; align-items: center; gap: 10px; }
+.opt-header h3 { font-size: 15px; font-weight: 700; }
+.opt-header p  { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+.opt-body { padding: 18px; }
+.opt-tips { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.opt-tip { display: flex; gap: 12px; padding: 12px 14px; border-radius: 7px; align-items: flex-start; }
+.opt-tip.warning { background: #FDEDEC; border-left: 4px solid #C0392B; }
+.opt-tip.caution { background: #FEF9E7; border-left: 4px solid #F39C12; }
+.opt-tip.positive { background: #EAFAF1; border-left: 4px solid #27AE60; }
+.opt-tip.info    { background: #EBF5FB; border-left: 4px solid #2E86C1; }
+.opt-tip-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+.opt-tip-text strong { display: block; font-size: 13px; color: #1B2A4A; margin-bottom: 3px; }
+.opt-tip-text span   { font-size: 12px; color: #5D6D7E; line-height: 1.6; }
+.opt-sim { background: #F0F4F8; border-radius: 8px; padding: 14px 16px; }
+.opt-sim-title { font-size: 13px; font-weight: 700; color: #1B2A4A; margin-bottom: 10px; }
+.opt-sim-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
+.opt-sim-bar-wrap { flex: 1; background: #DDE3ED; border-radius: 4px; height: 18px; overflow: hidden; position: relative; }
+.opt-sim-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-size: 11px; font-weight: 700; color: white; transition: width 0.4s; }
+.opt-sim-label { width: 130px; font-weight: 600; color: #2C3E50; flex-shrink: 0; }
+.opt-sim-value { width: 80px; text-align: right; font-weight: 700; flex-shrink: 0; }
+.opt-badge-green { background: #D5F5E3; color: #1E8449; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.opt-weights { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.opt-weight-chip { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; color: white; }
+
+/* Korrelations-Heatmap */
+.corr-table th, .corr-table td { padding: 7px 10px; font-size: 12px; text-align: center; border: 1px solid #EBF0F7; font-weight: 600; }
+.corr-table th { background: #1B2A4A; color: white; }
+.corr-table .row-label { background: #F0F4F8; color: #1B2A4A; font-weight: 700; text-align: left; }
+
+/* Asset-Beitrags-Tabelle */
+.contrib-bar { height: 8px; border-radius: 4px; display: inline-block; }
+
+/* Welcome */
+.welcome { max-width: 720px; margin: 50px auto; text-align: center; padding: 0 16px; }
+.welcome h2 { font-size: 19px; color: #1B2A4A; margin-bottom: 10px; }
+.welcome p { font-size: 13px; color: #7F8C8D; line-height: 1.7; margin-bottom: 8px; }
+.welcome-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
+.welcome-card { background: white; border-radius: 9px; padding: 18px; box-shadow: 0 2px 7px rgba(0,0,0,0.07); text-align: left; }
+.welcome-card h3 { font-size: 14px; color: #1B2A4A; margin-bottom: 6px; }
+.welcome-card p { font-size: 12px; color: #7F8C8D; line-height: 1.6; }
+
+@media (max-width: 650px) {
+  .kpi-row-5, .kpi-row-4 { grid-template-columns: repeat(2,1fr); }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .welcome-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div style="font-size:32px">📊</div>
+  <div>
+    <h1>Value at Risk Rechner</h1>
+    <p>Einzelwert-Analyse &amp; Portfolio-Risikoanalyse mit Korrelationen</p>
+  </div>
+</div>
+
+<!-- Modus-Tabs -->
+<div class="mode-tabs">
+  <button class="tab-btn active" id="tab-single" onclick="switchMode('single')">📈 Einzelwert</button>
+  <button class="tab-btn" id="tab-portfolio" onclick="switchMode('portfolio')">🗂 Portfolio</button>
+</div>
+
+<!-- ══ EINZELWERT-EINGABE ══ -->
+<div class="input-panel" id="panel-single">
+  <div class="input-row">
+    <div class="input-group">
+      <label>Ticker-Symbol</label>
+      <input id="s-ticker" class="input-ticker" type="text" placeholder="z.B. AAPL" maxlength="12" />
+    </div>
+    <div class="input-group">
+      <label>Investition (€)</label>
+      <input id="s-betrag" class="input-betrag" type="number" value="10000" min="100" step="1000" />
+    </div>
+    <div class="input-group">
+      <label>Zeitraum</label>
+      <select id="s-zeitraum" class="input-zeitraum">
+        <option value="5y">5 Jahre</option>
+        <option value="3y">3 Jahre</option>
+        <option value="2y">2 Jahre</option>
+        <option value="1y">1 Jahr</option>
+      </select>
+    </div>
+    <button class="btn-primary" id="s-btn" onclick="runSingle()">📈 Analysieren</button>
+  </div>
+  <div class="chips" style="margin-top:10px;">
+    <span>Beispiele:</span>
+    <div class="chip" onclick="singleQuick('SPY')">SPY (S&amp;P 500)</div>
+    <div class="chip" onclick="singleQuick('QQQ')">QQQ (NASDAQ)</div>
+    <div class="chip" onclick="singleQuick('AAPL')">AAPL (Apple)</div>
+    <div class="chip" onclick="singleQuick('NVDA')">NVDA (Nvidia)</div>
+    <div class="chip" onclick="singleQuick('MSFT')">MSFT (Microsoft)</div>
+    <div class="chip" onclick="singleQuick('URTH')">URTH (MSCI World)</div>
+    <div class="chip" onclick="singleQuick('GLD')">GLD (Gold)</div>
+  </div>
+</div>
+
+<!-- ══ PORTFOLIO-EINGABE ══ -->
+<div class="input-panel" id="panel-portfolio" style="display:none">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+    <div style="font-size:13px; color:#5D6D7E;">
+      Trage deine Positionen ein. Gewichte werden automatisch auf 100% normiert.
+    </div>
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <div class="input-group" style="flex-direction:row; align-items:center; gap:8px;">
+        <label style="white-space:nowrap;">Gesamtbetrag (€)</label>
+        <input id="p-betrag" class="input-betrag" type="number" value="10000" min="100" step="1000" style="width:130px" />
+      </div>
+      <div class="input-group" style="flex-direction:row; align-items:center; gap:8px;">
+        <label>Zeitraum</label>
+        <select id="p-zeitraum" class="input-zeitraum" style="width:120px">
+          <option value="5y">5 Jahre</option>
+          <option value="3y">3 Jahre</option>
+          <option value="2y">2 Jahre</option>
+          <option value="1y">1 Jahr</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <table class="portfolio-table" id="p-table">
+    <thead>
+      <tr>
+        <th style="width:95px">Ticker</th>
+        <th>Name (optional)</th>
+        <th style="width:85px">Gewicht %</th>
+        <th style="width:130px">Gewichts-Balken</th>
+        <th style="width:30px"></th>
+      </tr>
+    </thead>
+    <tbody id="p-tbody">
+    </tbody>
+  </table>
+
+  <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px;">
+    <button class="btn-add-row" onclick="addPortfolioRow()">+ Wertpapier hinzufügen</button>
+    <div style="font-size:12px; color:#7F8C8D;">
+      Summe: <span id="weight-sum-display" class="weight-sum weight-ok">0%</span>
+    </div>
+    <button class="btn-primary" id="p-btn" onclick="runPortfolio()">🗂 Portfolio analysieren</button>
+  </div>
+
+  <div class="chips">
+    <span>Schnell laden:</span>
+    <div class="chip" onclick="loadPreset('etf3')">ETF-Dreieck (World/EM/Bonds)</div>
+    <div class="chip" onclick="loadPreset('tech4')">Tech-Giganten (AAPL/MSFT/NVDA/GOOG)</div>
+    <div class="chip" onclick="loadPreset('balanced')">Klassisch 60/40 (SPY + TLT)</div>
+  </div>
+</div>
+
+<!-- Status -->
+<div class="status-bar" id="status-bar">
+  <div class="spinner" id="spinner"></div>
+  <span id="status-text">Lade Daten…</span>
+</div>
+
+<!-- Welcome -->
+<div class="welcome" id="welcome">
+  <h2>Risikoanalyse für Einzelwerte und Portfolios</h2>
+  <p>Berechne den <strong>Value at Risk (VaR)</strong> – das wichtigste Risikomaß der Finanzwelt.
+  Wähle oben zwischen Einzelwert und Portfolio-Analyse.</p>
+  <div class="welcome-grid">
+    <div class="welcome-card">
+      <h3>📈 Einzelwert-Analyse</h3>
+      <p>Ticker eingeben, Betrag wählen, analysieren. Verlustgrenzen für 1 Tag bis 1 Jahr bei drei Konfidenzleveln.</p>
+    </div>
+    <div class="welcome-card">
+      <h3>🗂 Portfolio-Analyse</h3>
+      <p>Mehrere Positionen mit Gewichten eingeben. Zeigt Portfolio-VaR unter Berücksichtigung von Korrelationen und den Diversifikationseffekt.</p>
+    </div>
+    <div class="welcome-card">
+      <h3>🔗 Korrelationsmatrix</h3>
+      <p>Wie stark bewegen sich deine Positionen gemeinsam? Farbkodierte Matrix zeigt Risiko-Abhängigkeiten auf einen Blick.</p>
+    </div>
+    <div class="welcome-card">
+      <h3>💡 Diversifikationseffekt</h3>
+      <p>Wie viel Risiko sparst du durch die Kombination der Positionen gegenüber der Summe der Einzelrisiken?</p>
+    </div>
+  </div>
+</div>
+
+<!-- Ergebnisse -->
+<div class="results" id="results"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// MODUS-SWITCHING
+// ═══════════════════════════════════════════════════════════════════════════
+let currentMode = 'single';
+function switchMode(m) {
+  currentMode = m;
+  document.getElementById('tab-single').classList.toggle('active', m==='single');
+  document.getElementById('tab-portfolio').classList.toggle('active', m==='portfolio');
+  document.getElementById('panel-single').style.display    = m==='single'    ? 'block' : 'none';
+  document.getElementById('panel-portfolio').style.display = m==='portfolio' ? 'block' : 'none';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('welcome').style.display = 'block';
+  hideStatus();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PORTFOLIO-TABELLE
+// ═══════════════════════════════════════════════════════════════════════════
+let rowId = 0;
+function addPortfolioRow(ticker='', name='', weight='') {
+  const id = ++rowId;
+  const tr = document.createElement('tr');
+  tr.id = 'row-'+id;
+  tr.innerHTML = `
+    <td><input class="ticker-inp" type="text" placeholder="AAPL" value="${ticker}"
+         oninput="this.value=this.value.toUpperCase(); updateWeights()" /></td>
+    <td><input type="text" placeholder="Optional" value="${name}" style="width:100%" /></td>
+    <td><input class="weight-inp" type="number" placeholder="25" value="${weight}" min="0" max="100" step="1"
+         oninput="updateWeights()" /></td>
+    <td class="weight-bar-cell"><div class="weight-bar" id="bar-${id}" style="width:0%"></div></td>
+    <td><button class="btn-del" onclick="delRow(${id})">✕</button></td>`;
+  document.getElementById('p-tbody').appendChild(tr);
+  updateWeights();
+}
+
+function delRow(id) {
+  const el = document.getElementById('row-'+id);
+  if (el) el.remove();
+  updateWeights();
+}
+
+function getPortfolioRows() {
+  const rows = [];
+  document.getElementById('p-tbody').querySelectorAll('tr').forEach(tr => {
+    const inputs = tr.querySelectorAll('input');
+    const ticker = inputs[0].value.trim().toUpperCase();
+    const name   = inputs[1].value.trim();
+    const weight = parseFloat(inputs[2].value) || 0;
+    if (ticker) rows.push({ ticker, name, weight });
+  });
+  return rows;
+}
+
+function updateWeights() {
+  const rows = getPortfolioRows();
+  const total = rows.reduce((s, r) => s + r.weight, 0);
+  const sumEl = document.getElementById('weight-sum-display');
+  sumEl.textContent = total.toFixed(1) + '%';
+  sumEl.className = 'weight-sum ' + (Math.abs(total - 100) < 0.1 ? 'weight-ok' : 'weight-warn');
+  // Balken aktualisieren
+  let ri = 0;
+  document.getElementById('p-tbody').querySelectorAll('tr').forEach(tr => {
+    const barId = 'bar-' + tr.id.replace('row-','');
+    const bar = document.getElementById(barId);
+    if (bar && rows[ri]) {
+      const pct = total > 0 ? (rows[ri].weight / total * 100) : 0;
+      bar.style.width = pct + '%';
+    }
+    ri++;
+  });
+}
+
+function loadPreset(name) {
+  document.getElementById('p-tbody').innerHTML = '';
+  rowId = 0;
+  const presets = {
+    'etf3':     [['URTH','MSCI World',60],['EEM','Emerging Markets',30],['TLT','US Bonds',10]],
+    'tech4':    [['AAPL','Apple',25],['MSFT','Microsoft',25],['NVDA','Nvidia',25],['GOOG','Alphabet',25]],
+    'balanced': [['SPY','S&P 500 ETF',60],['TLT','US Treasuries',40]],
+  };
+  (presets[name]||[]).forEach(([t,n,w]) => addPortfolioRow(t,n,w));
+}
+
+// Initial 3 leere Zeilen
+addPortfolioRow('SPY','S&P 500',40);
+addPortfolioRow('QQQ','NASDAQ',35);
+addPortfolioRow('GLD','Gold',25);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DATENABRUF
+// ═══════════════════════════════════════════════════════════════════════════
+function showStatus(msg, type='loading') {
+  const bar = document.getElementById('status-bar');
+  bar.className = 'status-bar ' + type;
+  document.getElementById('spinner').style.display = type==='loading' ? 'block' : 'none';
+  document.getElementById('status-text').textContent = msg;
+}
+function hideStatus() { document.getElementById('status-bar').className = 'status-bar'; }
+
+async function fetchYahooData(ticker, range) {
+  const y1 = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=${range}&events=history`;
+  const y2 = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=${range}&events=history`;
+  const proxies = [
+    `https://corsproxy.io/?url=${encodeURIComponent(y1)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(y1)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(y1)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(y2)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(y2)}`,
+  ];
+  let lastErr = '';
+  for (const url of proxies) {
+    try {
+      const resp = await fetch(url, { headers: {'Accept':'application/json','Cache-Control':'no-cache'} });
+      if (!resp.ok) { lastErr=`HTTP ${resp.status}`; continue; }
+      const text = await resp.text();
+      if (!text) { lastErr='Leere Antwort'; continue; }
+      let data; try { data=JSON.parse(text); } catch(e) { lastErr='JSON-Fehler'; continue; }
+      const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
+      if (!closes || closes.filter(Boolean).length < 10) { lastErr=`Wenig Daten (${closes?.filter(Boolean).length??0})`; continue; }
+      return data;
+    } catch(e) { lastErr=e.message; }
+  }
+  throw new Error(`Keine Daten für "${ticker}" (${lastErr})`);
+}
+
+function parseYahoo(raw, ticker) {
+  const r = raw.chart.result[0];
+  const meta = r.meta||{};
+  const prices=[], dates=[];
+  r.timestamp.forEach((t,i)=>{
+    const p=r.indicators.quote[0].close[i];
+    if(p&&p>0){ prices.push(p); dates.push(new Date(t*1000).toISOString().split('T')[0]); }
+  });
+  return { ticker:ticker.toUpperCase(), name:meta.longName||meta.shortName||ticker, currency:meta.currency||'USD', prices, dates };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MATHEMATIK
+// ═══════════════════════════════════════════════════════════════════════════
+function logRets(prices) {
+  const r=[];
+  for(let i=1;i<prices.length;i++) r.push(Math.log(prices[i]/prices[i-1]));
+  return r;
+}
+function pct(arr,p) {
+  const s=[...arr].sort((a,b)=>a-b);
+  const idx=(p/100)*(s.length-1), lo=Math.floor(idx), hi=Math.ceil(idx);
+  return s[lo]+(s[hi]-s[lo])*(idx-lo);
+}
+function histVar(rets,conf)  { return -pct(rets,(1-conf)*100); }
+function paramVar(rets,conf) {
+  const mu=rets.reduce((a,b)=>a+b,0)/rets.length;
+  const std=Math.sqrt(rets.reduce((a,b)=>a+(b-mu)**2,0)/(rets.length-1));
+  const z={0.90:1.2816,0.95:1.6449,0.99:2.3263}[conf];
+  return -(mu+z*std);
+}
+function cvar(rets,conf) {
+  const v=histVar(rets,conf); const tail=rets.filter(r=>r<-v);
+  return tail.length>0 ? -tail.reduce((a,b)=>a+b,0)/tail.length : v;
+}
+function scale(v,days) { return v*Math.sqrt(days); }
+function mean(arr)     { return arr.reduce((a,b)=>a+b,0)/arr.length; }
+function stddev(arr)   { const m=mean(arr); return Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length); }
+function corrCoef(a,b) {
+  const ma=mean(a),mb=mean(b),sa=stddev(a),sb=stddev(b);
+  if(!sa||!sb) return 0;
+  return a.reduce((s,v,i)=>s+(v-ma)*(b[i]-mb),0)/(a.length*sa*sb);
+}
+function maxDD(prices) {
+  let peak=prices[0],dd=0,pi=0,ti=0;
+  for(let i=1;i<prices.length;i++){
+    if(prices[i]>peak){peak=prices[i];pi=i;}
+    const d=(prices[i]-peak)/peak;
+    if(d<dd){dd=d;ti=i;}
+  }
+  return {pct:dd*100,pi,ti};
+}
+
+function computeVarTable(rets, investition) {
+  const confs=[0.90,0.95,0.99];
+  const hors=[['1 Tag',1],['1 Woche',5],['1 Monat',21],['1 Jahr',252]];
+  const tbl={};
+  confs.forEach(c=>{
+    const k=Math.round(c*100)+'%'; tbl[k]={};
+    const dh=histVar(rets,c), dp=paramVar(rets,c), dc=cvar(rets,c);
+    hors.forEach(([h,d])=>{
+      const vh=scale(dh,d)*100, vp=scale(dp,d)*100, vc=scale(dc,d)*100;
+      tbl[k][h]={hist_pct:vh,hist_abs:investition*vh/100,param_pct:vp,param_abs:investition*vp/100,cvar_pct:vc,cvar_abs:investition*vc/100};
+    });
+  });
+  return tbl;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EINZELWERT
+// ═══════════════════════════════════════════════════════════════════════════
+function singleQuick(t){ document.getElementById('s-ticker').value=t; runSingle(); }
+
+async function runSingle() {
+  const ticker  = document.getElementById('s-ticker').value.trim().toUpperCase();
+  const betrag  = parseFloat(document.getElementById('s-betrag').value)||10000;
+  const range   = document.getElementById('s-zeitraum').value;
+  if(!ticker){ alert('Bitte Ticker eingeben.'); return; }
+  document.getElementById('welcome').style.display='none';
+  document.getElementById('results').style.display='none';
+  document.getElementById('s-btn').disabled=true;
+  showStatus(`📥 Lade Kursdaten für ${ticker}…`,'loading');
+  try {
+    const raw=await fetchYahooData(ticker,range);
+    showStatus(`📊 Berechne VaR für ${ticker}…`,'loading');
+    const data=parseYahoo(raw,ticker);
+    if(data.prices.length<30) throw new Error(`Nur ${data.prices.length} Datenpunkte – anderen Zeitraum wählen.`);
+    renderSingle(data, betrag);
+    hideStatus();
+  } catch(e) {
+    showStatus(`❌ ${e.message}`,'error');
+    document.getElementById('welcome').style.display='block';
+  } finally { document.getElementById('s-btn').disabled=false; }
+}
+
+document.getElementById('s-ticker').addEventListener('keydown',e=>{ if(e.key==='Enter') runSingle(); });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PORTFOLIO
+// ═══════════════════════════════════════════════════════════════════════════
+async function runPortfolio() {
+  const rows    = getPortfolioRows().filter(r=>r.weight>0&&r.ticker);
+  const betrag  = parseFloat(document.getElementById('p-betrag').value)||10000;
+  const range   = document.getElementById('p-zeitraum').value;
+  if(rows.length<2){ alert('Mindestens 2 Positionen mit Gewicht > 0 eingeben.'); return; }
+  // Gewichte normieren auf 100%
+  const totalW=rows.reduce((s,r)=>s+r.weight,0);
+  rows.forEach(r=>r.weight=r.weight/totalW);
+
+  document.getElementById('welcome').style.display='none';
+  document.getElementById('results').style.display='none';
+  document.getElementById('p-btn').disabled=true;
+  showStatus(`📥 Lade Daten für ${rows.length} Positionen…`,'loading');
+  try {
+    // Alle parallel laden
+    const fetched = await Promise.all(rows.map(async (r,i) => {
+      showStatus(`📥 Lade ${r.ticker} (${i+1}/${rows.length})…`,'loading');
+      const raw = await fetchYahooData(r.ticker, range);
+      const data = parseYahoo(raw, r.ticker);
+      if(r.name) data.name = r.name;
+      return { ...data, weight: r.weight };
+    }));
+
+    showStatus(`📊 Berechne Portfolio-VaR…`,'loading');
+    // Gemeinsame Datumsmenge
+    const dateSets = fetched.map(d=>new Set(d.dates));
+    let commonDates = [...dateSets[0]].filter(dt=>dateSets.every(s=>s.has(dt))).sort();
+    if(commonDates.length<30) throw new Error(`Zu wenig gemeinsame Handelstage (${commonDates.length}). Anderen Zeitraum oder andere Ticker versuchen.`);
+
+    // Preise auf gemeinsame Daten filtern
+    const aligned = fetched.map(d=>{
+      const dateIdx={};
+      d.dates.forEach((dt,i)=>dateIdx[dt]=i);
+      return { ...d, prices: commonDates.map(dt=>d.prices[dateIdx[dt]]) };
+    });
+
+    // Renditen
+    const allRets = aligned.map(d=>logRets(d.prices));
+    // Portfolio-Renditen = gewichtete Summe
+    const portRets = allRets[0].map((_,t)=>
+      allRets.reduce((s,r,i)=>s+aligned[i].weight*r[t],0)
+    );
+
+    renderPortfolio(aligned, allRets, portRets, betrag, commonDates);
+    hideStatus();
+  } catch(e) {
+    showStatus(`❌ ${e.message}`,'error');
+    document.getElementById('welcome').style.display='block';
+  } finally { document.getElementById('p-btn').disabled=false; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HILFSFUNKTIONEN FÜR RENDERING
+// ═══════════════════════════════════════════════════════════════════════════
+function riskColor(vol) {
+  if(vol<10)  return ['#27AE60','Sehr konservativ'];
+  if(vol<15)  return ['#2ECC71','Konservativ'];
+  if(vol<25)  return ['#F39C12','Moderat'];
+  if(vol<35)  return ['#E67E22','Aggressiv'];
+  return       ['#C0392B','Sehr aggressiv'];
+}
+function fmt(n,d=2){ return (+n).toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+let charts={};
+function destroyCharts(){ Object.values(charts).forEach(c=>c.destroy()); charts={}; }
+
+function varTableHTML(vt, inv) {
+  const hors=['1 Tag','1 Woche','1 Monat','1 Jahr'];
+  let h=`<div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#E67E22"></div>90% – 9 von 10 sicher</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#D35400"></div>95% – 19 von 20 sicher</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#C0392B"></div>99% – 99 von 100 sicher</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#8E44AD"></div>CVaR 95% – Ø Verlust im Extremfall</div>
+  </div>
+  <table><thead><tr>
+    <th>Zeitraum</th>
+    <th style="color:#E67E22">90% €</th><th style="color:#E67E22">90% %</th>
+    <th style="color:#D35400">95% €</th><th style="color:#D35400">95% %</th>
+    <th style="color:#C0392B">99% €</th><th style="color:#C0392B">99% %</th>
+    <th style="color:#D7BDE2">CVaR 95% €</th>
+  </tr></thead><tbody>`;
+  hors.forEach(hor=>{
+    h+=`<tr>
+      <td>${hor}</td>
+      <td class="c90">${fmt(vt['90%'][hor].hist_abs)} €</td><td class="c90">${fmt(vt['90%'][hor].hist_pct)}%</td>
+      <td class="c95">${fmt(vt['95%'][hor].hist_abs)} €</td><td class="c95">${fmt(vt['95%'][hor].hist_pct)}%</td>
+      <td class="c99">${fmt(vt['99%'][hor].hist_abs)} €</td><td class="c99">${fmt(vt['99%'][hor].hist_pct)}%</td>
+      <td class="ccvar">${fmt(vt['95%'][hor].cvar_abs)} €</td>
+    </tr>`;
+  });
+  h+=`</tbody></table>
+  <div class="info-box"><strong>Lesehilfe:</strong> "95%, 1 Monat" → In 19 von 20 Monaten verlierst du nicht mehr als <strong>${fmt(vt['95%']['1 Monat'].hist_abs)} €</strong>.</div>`;
+  return h;
+}
+
+function drawVarChart(canvasId, vt) {
+  const hors=['1 Tag','1 Woche','1 Monat','1 Jahr'];
+  return new Chart(document.getElementById(canvasId),{
+    type:'bar',
+    data:{ labels:hors, datasets:[
+      {label:'90% VaR',data:hors.map(h=>vt['90%'][h].hist_pct),backgroundColor:'rgba(230,126,34,0.85)',borderColor:'#E67E22',borderWidth:1},
+      {label:'95% VaR',data:hors.map(h=>vt['95%'][h].hist_pct),backgroundColor:'rgba(211,84,0,0.85)',  borderColor:'#D35400',borderWidth:1},
+      {label:'99% VaR',data:hors.map(h=>vt['99%'][h].hist_pct),backgroundColor:'rgba(192,57,43,0.85)', borderColor:'#C0392B',borderWidth:1},
+    ]},
+    options:{responsive:true,plugins:{legend:{position:'bottom'}},scales:{y:{title:{display:true,text:'Verlust (%)'}}}}
+  });
+}
+
+function drawDistChart(canvasId, rets) {
+  const minR=Math.min(...rets)*100, maxR=Math.max(...rets)*100, bw=(maxR-minR)/40;
+  const bins=[],counts=[];
+  for(let i=0;i<40;i++){
+    const lo=minR+i*bw,hi=lo+bw;
+    bins.push(((lo+hi)/2).toFixed(1)+'%');
+    counts.push(rets.filter(r=>r*100>=lo&&r*100<hi).length);
+  }
+  return new Chart(document.getElementById(canvasId),{
+    type:'bar',
+    data:{labels:bins,datasets:[{label:'Häufigkeit',data:counts,backgroundColor:'rgba(27,42,74,0.75)',borderWidth:0}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{maxTicksLimit:8}},y:{title:{display:true,text:'Tage'}}}}
+  });
+}
+
+function drawPriceChart(canvasId, prices, dates, label, currency) {
+  return new Chart(document.getElementById(canvasId),{
+    type:'line',
+    data:{
+      labels:dates.length?dates:prices.map((_,i)=>i),
+      datasets:[{label,data:prices,borderColor:'#1B2A4A',backgroundColor:'rgba(27,42,74,0.1)',fill:true,tension:0.2,pointRadius:0,borderWidth:2}]
+    },
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:currency}}}}
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PORTFOLIO-OPTIMIERUNG
+// ═══════════════════════════════════════════════════════════════════════════
+function computeOptimization(assets, allRets, portRets, corrMatrix, betrag) {
+  const n = assets.length;
+  const colors = ['#1B2A4A','#2C4A7C','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#D35400'];
+
+  // ── 1. Hilfswerte ──────────────────────────────────────────────────────
+  const portVar95_1d = histVar(portRets, 0.95) * 100;
+  const indivVars    = allRets.map(r => histVar(r, 0.95) * 100);
+  const indivVols    = allRets.map(r => stddev(r) * Math.sqrt(252) * 100);
+
+  // Gewichteter VaR-Beitrag je Asset (isoliert)
+  const varContribs  = assets.map((a,i) => indivVars[i] * a.weight);
+  const totalIsolVar = varContribs.reduce((s,v) => s+v, 0);
+  const varShares    = varContribs.map(v => totalIsolVar > 0 ? v/totalIsolVar : 0);
+
+  // ── 2. Diagnosen ──────────────────────────────────────────────────────
+  const tips = [];
+
+  // A) Hochkorrelierte Paare (corr > 0.70)
+  const highCorrPairs = [];
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) {
+    if(corrMatrix[i][j] > 0.70)
+      highCorrPairs.push({ a:assets[i].ticker, b:assets[j].ticker, c:corrMatrix[i][j] });
+  }
+  if(highCorrPairs.length > 0) {
+    const pairs = highCorrPairs.map(p=>`<strong>${p.a}↔${p.b}</strong> (${fmt(p.c,2)})`).join(', ');
+    tips.push({ type:'warning', icon:'⚠️',
+      title: 'Hohe Korrelation – wenig Diversifikationseffekt',
+      text: `Diese Paare bewegen sich stark im Gleichlauf: ${pairs}. Bei einem Marktabsturz fallen sie gleichzeitig. Erwäge, eine der Positionen durch eine weniger korrelierte Alternative zu ersetzen (z.B. Anleihen TLT, Gold GLD, oder defensiver Sektor XLU).`
+    });
+  }
+
+  // B) Konzentrations-Warnung: Positionsgewicht vs. VaR-Beitrag
+  const overweight = assets.map((a,i) => ({ ticker:a.ticker, weight:a.weight, varShare:varShares[i], ratio:varShares[i]/a.weight }))
+    .filter(x => x.ratio > 1.4 && x.weight > 0.05)
+    .sort((a,b) => b.ratio-a.ratio);
+  if(overweight.length > 0) {
+    const items = overweight.map(x=>`<strong>${x.ticker}</strong> (${fmt(x.weight*100,0)}% Gewicht, ${fmt(x.varShare*100,0)}% Risikoanteil)`).join(', ');
+    tips.push({ type:'caution', icon:'📊',
+      title: 'Risikokonzentration – diese Positionen tragen überproportional viel zum VaR bei',
+      text: `${items}. Hier schlummert mehr Risiko als der Gewichtsanteil vermuten lässt. Eine Reduzierung dieser Positionen hätte die größte Wirkung auf deinen Portfolio-VaR.`
+    });
+  }
+
+  // C) Fehlen defensive Diversifikatoren?
+  const tickers = assets.map(a=>a.ticker.toUpperCase());
+  const hasBonds = tickers.some(t=>['TLT','IEF','BND','AGG','SHY','GOVT','TIP','VGLT','SCHZ'].includes(t));
+  const hasGold  = tickers.some(t=>['GLD','IAU','GOLD','PHYS'].includes(t));
+  const hasCash  = tickers.some(t=>['SHV','BIL','VMOT','SGOV'].includes(t));
+  if(!hasBonds && !hasGold) {
+    tips.push({ type:'info', icon:'💡',
+      title: 'Keine defensiven Positionen im Portfolio',
+      text: `Anleihen-ETFs (z.B. TLT, IEF) und Gold (GLD) weisen in der Regel eine niedrige oder negative Korrelation zu Aktien auf – besonders in Crashphasen. Schon 10–20% Allokation in diese Assets kann den Portfolio-VaR deutlich senken, ohne die Renditeerwartung massiv zu schmälern.`
+    });
+  } else if(!hasBonds) {
+    tips.push({ type:'info', icon:'💡',
+      title: 'Kein Anleihen-ETF im Portfolio',
+      text: `Anleihen-ETFs (TLT, IEF, BND) steigen oft wenn Aktien fallen – ein klassischer Risikopuffer. 10–20% Anleihen im Portfolio können den VaR substanziell senken.`
+    });
+  }
+
+  // D) Positives: Gute Diversifikation vorhanden
+  const avgCorr = (()=>{
+    let sum=0,cnt=0;
+    for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){ sum+=corrMatrix[i][j];cnt++; }
+    return cnt>0 ? sum/cnt : 1;
+  })();
+  if(avgCorr < 0.50 && highCorrPairs.length === 0) {
+    tips.push({ type:'positive', icon:'✅',
+      title: 'Gute Basis-Diversifikation',
+      text: `Die durchschnittliche Korrelation deiner Positionen beträgt ${fmt(avgCorr,2)} – das ist moderat bis niedrig. Dein Portfolio profitiert bereits von Diversifikationseffekten. Weitere Verbesserungen sind über defensive Assets oder eine Umgewichtung der Risikokonzentration möglich.`
+    });
+  }
+
+  // ── 3. Optimiertes Portfolio simulieren ───────────────────────────────
+  // Strategie: Reduziere den Top-VaR-Beitrag, verteile auf die anderen
+  const sorted = [...assets.map((a,i)=>({...a,i,varShare:varShares[i]}))].sort((a,b)=>b.varShare-a.varShare);
+  const topAsset = sorted[0];
+  const bottomAsset = sorted[sorted.length-1];
+
+  // Optimierungsvorschlag: Top-Contributor um max. 10 Prozentpunkte reduzieren
+  const reduceBy = Math.min(topAsset.weight * 0.30, 0.10); // max 30% oder 10pp
+  const optWeights = assets.map((a,i) => {
+    if(i === topAsset.i) return Math.max(a.weight - reduceBy, 0.05);
+    // Auf die anderen gleichmäßig verteilen
+    return a.weight + (reduceBy / (n-1));
+  });
+  // Normieren
+  const optTotal = optWeights.reduce((s,w)=>s+w,0);
+  const optWeightsNorm = optWeights.map(w=>w/optTotal);
+
+  // Simulated portfolio returns with new weights
+  const optRets = allRets[0].map((_,t) =>
+    allRets.reduce((s,r,i) => s + optWeightsNorm[i]*r[t], 0)
+  );
+  const optVar95_1d = histVar(optRets, 0.95) * 100;
+  const optVar95_1m = scale(histVar(optRets, 0.95), 21) * 100;
+  const optVar95_1y = scale(histVar(optRets, 0.95), 252) * 100;
+
+  const currVar95_1m = scale(histVar(portRets, 0.95), 21) * 100;
+  const currVar95_1y = scale(histVar(portRets, 0.95), 252) * 100;
+
+  const saving1d = (portVar95_1d - optVar95_1d) * betrag / 100;
+  const saving1m = (currVar95_1m - optVar95_1m) * betrag / 100;
+  const saving1y = (currVar95_1y - optVar95_1y) * betrag / 100;
+  const savingPct = portVar95_1d > 0 ? (portVar95_1d - optVar95_1d) / portVar95_1d * 100 : 0;
+
+  // ── 4. HTML generieren ────────────────────────────────────────────────
+  const tipsHtml = tips.map(t=>`
+    <div class="opt-tip ${t.type}">
+      <div class="opt-tip-icon">${t.icon}</div>
+      <div class="opt-tip-text"><strong>${t.title}</strong><span>${t.text}</span></div>
+    </div>`).join('');
+
+  const weightChips = assets.map((a,i)=>{
+    const curr = (a.weight*100).toFixed(0);
+    const opt  = (optWeightsNorm[i]*100).toFixed(0);
+    const changed = Math.abs(optWeightsNorm[i]-a.weight) > 0.005;
+    return `<span class="opt-weight-chip" style="background:${colors[i%colors.length]}">${a.ticker}: ${curr}%${changed?` → <strong>${opt}%</strong>`:''}`;
+  }).join('</span>');
+
+  const maxBar = Math.max(portVar95_1d, optVar95_1d, 0.01);
+
+  return `
+  <div class="opt-card">
+    <div class="opt-header">
+      <div style="font-size:26px">🎯</div>
+      <div><h3>Portfolio-Optimierung</h3>
+      <p>Konkrete Maßnahmen zur VaR-Reduktion auf Basis deiner historischen Renditedaten</p></div>
+    </div>
+    <div class="opt-body">
+      <div class="opt-tips">${tipsHtml || '<div class="opt-tip positive"><div class="opt-tip-icon">✅</div><div class="opt-tip-text"><strong>Portfolio gut diversifiziert</strong><span>Keine kritischen Muster gefunden. Feinoptimierungen über die Gewichtsanpassung unten möglich.</span></div></div>'}</div>
+
+      <div class="opt-sim">
+        <div class="opt-sim-title">📐 Simulations-Ergebnis: Was bringt eine Umgewichtung?</div>
+        <p style="font-size:12px;color:#5D6D7E;margin-bottom:12px;">
+          Vorschlag: <strong>${topAsset.ticker}</strong> von ${fmt(topAsset.weight*100,0)}% auf ${fmt(optWeightsNorm[topAsset.i]*100,0)}% reduzieren
+          und gleichmäßig auf die anderen Positionen verteilen.
+          Effekt berechnet auf Basis der echten historischen Renditedaten.
+        </p>
+
+        <div class="opt-sim-row">
+          <span class="opt-sim-label">Aktuell (1 Tag)</span>
+          <div class="opt-sim-bar-wrap">
+            <div class="opt-sim-bar" style="width:${Math.min(portVar95_1d/maxBar*100,100)}%;background:#C0392B">
+              ${fmt(portVar95_1d,2)}%
+            </div>
+          </div>
+          <span class="opt-sim-value" style="color:#C0392B">${fmt(portVar95_1d*betrag/100)} €</span>
+        </div>
+        <div class="opt-sim-row">
+          <span class="opt-sim-label">Optimiert (1 Tag)</span>
+          <div class="opt-sim-bar-wrap">
+            <div class="opt-sim-bar" style="width:${Math.min(optVar95_1d/maxBar*100,100)}%;background:#27AE60">
+              ${fmt(optVar95_1d,2)}%
+            </div>
+          </div>
+          <span class="opt-sim-value" style="color:#27AE60">${fmt(optVar95_1d*betrag/100)} €</span>
+        </div>
+
+        <div style="margin:12px 0 10px;font-size:13px;">
+          Einsparung:
+          <span class="opt-badge-green">−${fmt(saving1d)} € (1 Tag)</span>&nbsp;
+          <span class="opt-badge-green">−${fmt(saving1m)} € (1 Monat)</span>&nbsp;
+          <span class="opt-badge-green">−${fmt(saving1y)} € (1 Jahr)</span>&nbsp;
+          <span class="opt-badge-green">−${fmt(savingPct,1)}% weniger Risiko</span>
+        </div>
+
+        <div style="font-size:12px;color:#5D6D7E;margin-bottom:8px;font-weight:600">Empfohlene Gewichte:</div>
+        <div class="opt-weights">${weightChips}</span></div>
+
+        <div style="font-size:11px;color:#95A5A6;margin-top:10px;">
+          ⚠️ Simulation basiert auf historischen Korrelationen. Zukünftige Effekte können abweichen.
+          In Krisen steigen Korrelationen häufig an – der Diversifikationseffekt sinkt dann.
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RENDER EINZELWERT
+// ═══════════════════════════════════════════════════════════════════════════
+function renderSingle(data, inv) {
+  const rets=logRets(data.prices), n=rets.length;
+  const annRet=mean(rets)*252*100, annVol=stddev(rets)*Math.sqrt(252)*100;
+  const dd=maxDD(data.prices);
+  const vt=computeVarTable(rets,inv);
+  const [rc,rl]=riskColor(annVol);
+
+  let html=`
+  <div class="kpi-row kpi-row-5">
+    <div class="kpi-card"><div class="kpi-label">Wertpapier</div>
+      <div class="kpi-value" style="font-size:16px">${data.ticker}</div>
+      <div class="kpi-sub">${data.name.length>22?data.name.slice(0,22)+'…':data.name}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Kurs</div>
+      <div class="kpi-value">${fmt(data.prices[data.prices.length-1])}</div>
+      <div class="kpi-sub">${data.currency}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Investition</div>
+      <div class="kpi-value">${fmt(inv,0)} €</div></div>
+    <div class="kpi-card"><div class="kpi-label">Jahres-Vola</div>
+      <div class="kpi-value" style="color:${rc}">${fmt(annVol,1)}%</div>
+      <div class="kpi-sub"><span class="risk-badge" style="background:${rc}">${rl}</span></div></div>
+    <div class="kpi-card"><div class="kpi-label">Max. Drawdown</div>
+      <div class="kpi-value" style="color:#C0392B">${fmt(dd.pct,1)}%</div>
+      <div class="kpi-sub">${data.dates[dd.pi]||'?'} → ${data.dates[dd.ti]||'?'}</div></div>
+  </div>
+  <div class="card"><div class="card-title">🔴 Verlustrisiken bei ${fmt(inv,0)} € Investment</div>
+    ${varTableHTML(vt,inv)}</div>
+  <div class="grid-2">
+    <div class="card"><div class="card-title">📈 VaR nach Zeitraum</div><canvas id="c-var" height="220"></canvas></div>
+    <div class="card"><div class="card-title">📉 Rendite-Verteilung</div><canvas id="c-dist" height="220"></canvas></div>
+  </div>
+  <div class="card"><div class="card-title">📊 Kursverlauf (letztes Jahr)</div><canvas id="c-price" height="110"></canvas></div>
+  <div class="grid-2">
+    <div class="card"><div class="card-title">📐 Risiko-Kennzahlen</div><table>
+      <tr><td>Ø Jahresrendite</td><td style="font-weight:700;color:${annRet>=0?'#27AE60':'#C0392B'}">${annRet>=0?'+':''}${fmt(annRet)}%</td></tr>
+      <tr><td>Jahresvolatilität</td><td style="font-weight:700">${fmt(annVol)}%</td></tr>
+      <tr><td>Schlechtester Tag</td><td style="font-weight:700;color:#C0392B">${fmt(Math.min(...rets)*100)}% (${data.dates[rets.indexOf(Math.min(...rets))+1]||'?'})</td></tr>
+      <tr><td>Bester Tag</td><td style="font-weight:700;color:#27AE60">+${fmt(Math.max(...rets)*100)}%</td></tr>
+      <tr><td>Max. Drawdown</td><td style="font-weight:700;color:#C0392B">${fmt(dd.pct)}%</td></tr>
+      <tr><td>Handelstage analysiert</td><td style="font-weight:700">${n}</td></tr>
+    </table></div>
+    <div class="card"><div class="card-title">ℹ️ Zeitraum</div><table>
+      <tr><td>Von</td><td style="font-weight:700">${data.dates[0]||'?'}</td></tr>
+      <tr><td>Bis</td><td style="font-weight:700">${data.dates[data.dates.length-1]||'?'}</td></tr>
+      <tr><td>Währung</td><td style="font-weight:700">${data.currency}</td></tr>
+    </table></div>
+  </div>
+  <div class="disclaimer">⚠️ VaR basiert auf historischen Daten. Extremereignisse werden systematisch unterschätzt. Keine Anlageberatung.</div>`;
+
+  const container=document.getElementById('results');
+  destroyCharts();
+  container.innerHTML=html;
+  container.style.display='block';
+
+  charts.var   = drawVarChart('c-var', vt);
+  charts.dist  = drawDistChart('c-dist', rets);
+  charts.price = drawPriceChart('c-price', data.prices.slice(-252), data.dates.slice(-252), data.ticker, data.currency);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RENDER PORTFOLIO
+// ═══════════════════════════════════════════════════════════════════════════
+function renderPortfolio(assets, allRets, portRets, betrag, commonDates) {
+  const n=portRets.length;
+  const portVt=computeVarTable(portRets, betrag);
+  const portAnnVol=stddev(portRets)*Math.sqrt(252)*100;
+  const portAnnRet=mean(portRets)*252*100;
+  const [rc,rl]=riskColor(portAnnVol);
+
+  // Summe Einzel-VaR (ohne Diversifikation)
+  const sumIndivVar95 = assets.reduce((s,a,i)=>{
+    const v=histVar(allRets[i],0.95);
+    return s + scale(v,1)*100 * a.weight;
+  },0) * betrag / 100;
+  const portVar95 = portVt['95%']['1 Tag'].hist_abs;
+  const diviEffect = sumIndivVar95 - portVar95;
+  const diviPct    = sumIndivVar95>0 ? diviEffect/sumIndivVar95*100 : 0;
+
+  // Korrelationsmatrix
+  const tickers=assets.map(a=>a.ticker);
+  const corrMatrix=tickers.map((_,i)=>tickers.map((_,j)=>corrCoef(allRets[i],allRets[j])));
+
+  // Farbe für Korrelation
+  function corrColor(c) {
+    if(c>=0.8)  return '#C0392B';
+    if(c>=0.5)  return '#E67E22';
+    if(c>=0.2)  return '#F9E79F';
+    if(c>=-0.2) return '#D5F5E3';
+    if(c>=-0.5) return '#A9DFBF';
+    return '#27AE60';
+  }
+
+  // Beitrag jedes Assets zum Portfolio-VaR
+  const contributions = assets.map((a,i)=>{
+    const indivVar=histVar(allRets[i],0.95)*Math.sqrt(1)*100;
+    return { ticker:a.ticker, name:a.name, weight:a.weight, indivVar:indivVar*betrag*a.weight/100 };
+  });
+
+  // Korrelationstabelle HTML
+  let corrHtml=`<table class="corr-table"><thead><tr><th></th>`;
+  tickers.forEach(t=>corrHtml+=`<th>${t}</th>`);
+  corrHtml+=`</tr></thead><tbody>`;
+  corrMatrix.forEach((row,i)=>{
+    corrHtml+=`<tr><td class="row-label">${tickers[i]}</td>`;
+    row.forEach((c,j)=>{
+      const bg=corrColor(c);
+      const textColor=c>0.2||c<-0.5?'white':'#2C3E50';
+      corrHtml+=`<td style="background:${bg};color:${textColor};font-weight:700">${i===j?'–':fmt(c,2)}</td>`;
+    });
+    corrHtml+=`</tr>`;
+  });
+  corrHtml+=`</tbody></table>`;
+
+  // Asset-Beitrags-Tabelle
+  let contribHtml=`<table><thead><tr><th>Ticker</th><th>Gewicht</th><th>Einzel-VaR 95% (1T)</th><th>Anteil am Portfolio</th></tr></thead><tbody>`;
+  const colors=['#1B2A4A','#2C4A7C','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#D35400'];
+  contributions.forEach((c,i)=>{
+    const barW=sumIndivVar95>0?c.indivVar/sumIndivVar95*100:0;
+    contribHtml+=`<tr>
+      <td><span style="display:inline-block;width:10px;height:10px;background:${colors[i%colors.length]};border-radius:2px;margin-right:6px"></span>${c.ticker}</td>
+      <td>${fmt(c.weight*100,1)}%</td>
+      <td class="c95">${fmt(c.indivVar)} €</td>
+      <td><div style="display:flex;align-items:center;gap:8px;">
+        <div class="contrib-bar" style="width:${barW}px;max-width:120px;background:${colors[i%colors.length]}"></div>
+        <span>${fmt(barW,1)}%</span>
+      </div></td>
+    </tr>`;
+  });
+  contribHtml+=`</tbody></table>`;
+
+  // Gewichts-Daten für Donut
+  const pieData=assets.map((a,i)=>({label:a.ticker,value:a.weight*100,color:colors[i%colors.length]}));
+
+  let html=`
+  <!-- KPIs -->
+  <div class="kpi-row kpi-row-4">
+    <div class="kpi-card"><div class="kpi-label">Portfolio</div>
+      <div class="kpi-value" style="font-size:15px">${assets.length} Positionen</div>
+      <div class="kpi-sub">${assets.map(a=>a.ticker).join(' · ')}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Gesamtbetrag</div>
+      <div class="kpi-value">${fmt(betrag,0)} €</div></div>
+    <div class="kpi-card"><div class="kpi-label">Portfolio-Vola</div>
+      <div class="kpi-value" style="color:${rc}">${fmt(portAnnVol,1)}%</div>
+      <div class="kpi-sub"><span class="risk-badge" style="background:${rc}">${rl}</span></div></div>
+    <div class="kpi-card"><div class="kpi-label">Diversifikations-Vorteil</div>
+      <div class="kpi-value" style="color:#27AE60">-${fmt(diviEffect)} €</div>
+      <div class="kpi-sub">${fmt(diviPct,1)}% Risikoreduktion (95%, 1T)</div></div>
+  </div>
+
+  <!-- Diversifikationseffekt-Box -->
+  <div class="divi-box">
+    💡 <strong>Diversifikationseffekt:</strong> Die Summe der Einzel-VaR deiner Positionen beträgt <strong>${fmt(sumIndivVar95)} €</strong>.
+    Durch die Kombination im Portfolio sinkt dein tatsächlicher VaR (95%, 1 Tag) auf <strong>${fmt(portVar95)} €</strong> –
+    das sind <strong>${fmt(diviEffect)} € weniger</strong> Risiko dank Diversifikation (${fmt(diviPct,1)}% Reduktion).
+    Je geringer die Korrelation zwischen deinen Positionen, desto größer dieser Effekt.
+  </div>
+
+  <!-- Portfolio-VaR Tabelle -->
+  <div class="card">
+    <div class="card-title">🔴 Portfolio-Verlustrisiken bei ${fmt(betrag,0)} € Gesamtinvestition</div>
+    ${varTableHTML(portVt, betrag)}
+  </div>
+
+  <!-- Charts Zeile 1 -->
+  <div class="grid-2">
+    <div class="card"><div class="card-title">📈 Portfolio-VaR nach Zeitraum</div><canvas id="c-pvar" height="220"></canvas></div>
+    <div class="card"><div class="card-title">📉 Portfolio Rendite-Verteilung</div><canvas id="c-pdist" height="220"></canvas></div>
+  </div>
+
+  <!-- Korrelation + Gewichte -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">🔗 Korrelationsmatrix</div>
+      ${corrHtml}
+      <div class="info-box" style="margin-top:10px;">
+        <strong>Farben:</strong>
+        <span style="background:#C0392B;color:white;padding:1px 6px;border-radius:3px;font-size:11px">≥0.8 sehr hoch</span>
+        <span style="background:#E67E22;color:white;padding:1px 6px;border-radius:3px;font-size:11px">≥0.5 hoch</span>
+        <span style="background:#D5F5E3;color:#2C3E50;padding:1px 6px;border-radius:3px;font-size:11px">gering</span>
+        <span style="background:#27AE60;color:white;padding:1px 6px;border-radius:3px;font-size:11px">negativ</span><br>
+        Niedrige/negative Korrelationen = bessere Diversifikation = weniger Risiko.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">🥧 Portfolio-Zusammensetzung</div>
+      <canvas id="c-pie" height="200"></canvas>
+    </div>
+  </div>
+
+  <!-- Asset-Beiträge -->
+  <div class="card">
+    <div class="card-title">📊 VaR-Beitrag je Position (95%, 1 Tag, unkorreliert)</div>
+    ${contribHtml}
+    <div class="info-box">Diese Tabelle zeigt den <em>Einzel-VaR</em> je Position – also das Risiko jeder Position isoliert betrachtet,
+    gewichtet mit ihrem Portfolioanteil. Die Summe ist höher als der Portfolio-VaR weil Korrelationen das Gesamtrisiko reduzieren.</div>
+  </div>
+
+  <!-- Portfolio Kurse -->
+  <div class="card">
+    <div class="card-title">📊 Kursverlauf (gemeinsamer Zeitraum, normiert auf 100)</div>
+    <canvas id="c-prices" height="140"></canvas>
+  </div>
+
+  ${computeOptimization(assets, allRets, portRets, corrMatrix, betrag)}
+
+  <div class="disclaimer">⚠️ VaR basiert auf historischen Daten und historischen Korrelationen. In Krisen steigen Korrelationen oft stark an (Gleichlauf). Diese Analyse ist keine Anlageberatung.</div>`;
+
+  const container=document.getElementById('results');
+  destroyCharts();
+  container.innerHTML=html;
+  container.style.display='block';
+
+  // Charts zeichnen
+  charts.pvar  = drawVarChart('c-pvar', portVt);
+  charts.pdist = drawDistChart('c-pdist', portRets);
+
+  // Donut
+  charts.pie = new Chart(document.getElementById('c-pie'),{
+    type:'doughnut',
+    data:{ labels:pieData.map(d=>d.label), datasets:[{data:pieData.map(d=>d.value),backgroundColor:pieData.map(d=>d.color),borderWidth:2,borderColor:'white'}] },
+    options:{ responsive:true, plugins:{ legend:{position:'bottom'}, tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmt(ctx.parsed,1)}%`}} } }
+  });
+
+  // Normierter Preischart (alle Assets)
+  const priceDatasets=assets.map((a,i)=>({
+    label:a.ticker, borderColor:colors[i%colors.length], backgroundColor:'transparent',
+    data:a.prices.map(p=>p/a.prices[0]*100), tension:0.2, pointRadius:0, borderWidth:2
+  }));
+  charts.prices = new Chart(document.getElementById('c-prices'),{
+    type:'line',
+    data:{ labels:commonDates, datasets:priceDatasets },
+    options:{ responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{title:{display:true,text:'Normiert (Start=100)'}}} }
+  });
+}
+</script>
+</body>
+</html>
