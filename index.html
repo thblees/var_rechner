@@ -196,6 +196,24 @@ td:first-child { font-weight: 700; text-align: left; color: #1B2A4A; }
   </div>
 </div>
 
+<!-- API-Key Banner -->
+<div id="apikey-banner" style="background:#FEF9E7; border-bottom:1px solid #F9E79F; padding:8px 36px; font-size:12px; color:#7D6608; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+  <span>🔑 <strong>Datenquelle:</strong> <span id="apikey-status-label">Yahoo Finance (Proxies)</span></span>
+  <span style="opacity:.6">|</span>
+  <span>Für zuverlässigen Datenabruf: <strong>Alpha Vantage API-Key</strong> empfohlen (kostenlos) →
+    <a href="https://www.alphavantage.co/support/#api-key" target="_blank" style="color:#7D6608;font-weight:700;">alphavantage.co</a>
+  </span>
+  <button onclick="toggleApiKeyInput()" style="padding:3px 10px;background:#F9E79F;border:1px solid #D4AC0D;border-radius:5px;font-size:12px;cursor:pointer;font-weight:600;">⚙️ Key eingeben</button>
+</div>
+<div id="apikey-input-row" style="display:none; background:#FFFDE7; border-bottom:1px solid #F9E79F; padding:10px 36px; gap:10px; align-items:center; flex-wrap:wrap;">
+  <label style="font-size:12px;font-weight:700;color:#5D6D7E;">Alpha Vantage API-Key:</label>
+  <input id="apikey-field" type="text" placeholder="z.B. ABC123DEF456" maxlength="50"
+    style="padding:7px 12px;border:2px solid #DDE3ED;border-radius:6px;font-size:13px;width:260px;font-family:monospace;" />
+  <button onclick="saveApiKey()" style="padding:7px 16px;background:#1B2A4A;color:white;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">💾 Speichern</button>
+  <button onclick="clearApiKey()" style="padding:7px 12px;background:#FDEDEC;color:#922B21;border:1px solid #FADBD8;border-radius:6px;font-size:12px;cursor:pointer;">Löschen</button>
+  <span style="font-size:11px;color:#7F8C8D;">Schlüssel wird lokal im Browser gespeichert. Kostenlos: 25 Abfragen/Tag.</span>
+</div>
+
 <!-- Modus-Tabs -->
 <div class="mode-tabs">
   <button class="tab-btn active" id="tab-single" onclick="switchMode('single')">📈 Einzelwert</button>
@@ -459,6 +477,100 @@ td:first-child { font-weight: 700; text-align: left; color: #1B2A4A; }
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
+// API-KEY VERWALTUNG (Alpha Vantage)
+// ═══════════════════════════════════════════════════════════════════════════
+const AV_KEY_STORAGE = 'var_alphavantage_key';
+
+function getApiKey() {
+  return localStorage.getItem(AV_KEY_STORAGE) || '';
+}
+function toggleApiKeyInput() {
+  const row = document.getElementById('apikey-input-row');
+  const visible = row.style.display !== 'none';
+  row.style.display = visible ? 'none' : 'flex';
+  if (!visible) document.getElementById('apikey-field').value = getApiKey();
+}
+function saveApiKey() {
+  const key = document.getElementById('apikey-field').value.trim();
+  if (!key) { alert('Bitte einen API-Key eingeben.'); return; }
+  localStorage.setItem(AV_KEY_STORAGE, key);
+  updateApiKeyLabel();
+  document.getElementById('apikey-input-row').style.display = 'none';
+  alert('✅ API-Key gespeichert! Daten werden ab jetzt über Alpha Vantage geladen.');
+}
+function clearApiKey() {
+  if (!confirm('API-Key löschen? Es wird dann wieder versucht, Yahoo Finance zu nutzen.')) return;
+  localStorage.removeItem(AV_KEY_STORAGE);
+  document.getElementById('apikey-field').value = '';
+  updateApiKeyLabel();
+}
+function updateApiKeyLabel() {
+  const key = getApiKey();
+  const lbl = document.getElementById('apikey-status-label');
+  const banner = document.getElementById('apikey-banner');
+  if (key) {
+    lbl.textContent = '✅ Alpha Vantage (aktiv)';
+    lbl.style.color = '#1E8449';
+    banner.style.background = '#EAFAF1';
+    banner.style.borderColor = '#A9DFBF';
+    banner.style.color = '#1E8449';
+  } else {
+    lbl.textContent = 'Yahoo Finance (Proxies – evtl. instabil)';
+    lbl.style.color = '#7D6608';
+    banner.style.background = '#FEF9E7';
+    banner.style.borderColor = '#F9E79F';
+    banner.style.color = '#7D6608';
+  }
+}
+
+// Alpha Vantage: range-String (z.B. "5y") → Ausgabegröße
+function avOutputSize(range) {
+  return (range === '1y' || range === '2y') ? 'compact' : 'full';
+}
+
+// Alpha Vantage API aufrufen und in internes Format konvertieren
+async function fetchAlphaVantage(ticker, range) {
+  const key = getApiKey();
+  if (!key) return null;
+  const size = avOutputSize(range);
+  const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${ticker}&outputsize=${size}&apikey=${key}`;
+  showStatus(`📥 ${ticker}: Lade via Alpha Vantage…`, 'loading');
+  try {
+    const resp = await fetchWithTimeout(url, { headers: {'Accept':'application/json'} }, 15000);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    // Fehlercodes von Alpha Vantage prüfen
+    if (json['Note'])        throw new Error('Alpha Vantage Tageslimit erreicht (25 Abfragen/Tag). Bitte morgen wieder versuchen oder API-Key upgraden.');
+    if (json['Information']) throw new Error('Alpha Vantage: ' + json['Information']);
+    if (json['Error Message']) throw new Error('Alpha Vantage: Ticker „' + ticker + '" nicht gefunden.');
+    const ts = json['Time Series (Daily)'];
+    if (!ts) throw new Error('Alpha Vantage: Keine Daten für „' + ticker + '".');
+
+    // Datumsfilter je nach range
+    const now = new Date();
+    const cutoff = new Date(now);
+    const rangeMap = { '1y':1,'2y':2,'3y':3,'5y':5 };
+    cutoff.setFullYear(now.getFullYear() - (rangeMap[range] || 5));
+
+    const dates = [], prices = [];
+    Object.keys(ts).sort().forEach(dt => {
+      if (new Date(dt) >= cutoff) {
+        dates.push(dt);
+        prices.push(parseFloat(ts[dt]['5. adjusted close']));
+      }
+    });
+    if (prices.length < 30) throw new Error(`Zu wenig Daten für „${ticker}" (${prices.length} Tage).`);
+
+    // Meta-Daten aus Yahoo-Format simulieren (für parseYahoo-Kompatibilität)
+    // → Wir geben direkt das aufbereitete Objekt zurück, kein Yahoo-Format nötig
+    const name = json['Meta Data']?.['2. Symbol'] || ticker;
+    return { ticker: ticker.toUpperCase(), name, currency: 'USD', prices, dates };
+  } catch(e) {
+    throw new Error(e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // PORTFOLIO SPEICHERN / LADEN
 // ═══════════════════════════════════════════════════════════════════════════
 const PORTFOLIO_KEY = 'var_saved_portfolios';
@@ -632,6 +744,7 @@ addPortfolioRow('SPY','S&P 500',40);
 addPortfolioRow('QQQ','NASDAQ',35);
 addPortfolioRow('GLD','Gold',25);
 renderSavedPortfolios();
+updateApiKeyLabel();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DATENABRUF
@@ -654,22 +767,28 @@ async function fetchWithTimeout(url, options, ms=9000) {
   } catch(e) { clearTimeout(id); throw e; }
 }
 
-async function fetchYahooData(ticker, range) {
+// Zentrale Fetch-Funktion: Alpha Vantage (wenn Key vorhanden) → Yahoo Proxies
+async function fetchData(ticker, range) {
+  // ── 1. Alpha Vantage (zuverlässig, direkt, kein Proxy nötig) ──────────
+  if (getApiKey()) {
+    const avData = await fetchAlphaVantage(ticker, range);
+    if (avData) return avData; // bereits aufbereitet, direkt nutzbar
+  }
+
+  // ── 2. Yahoo Finance über CORS-Proxies (Fallback) ─────────────────────
   const y1 = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=${range}&events=history`;
   const y2 = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=${range}&events=history`;
-
-  // 10 Proxies in Reihenfolge – je nach Verfügbarkeit
   const proxies = [
-    { label:'corsproxy.io (1)',   url:`https://corsproxy.io/?url=${encodeURIComponent(y1)}` },
-    { label:'allorigins (1)',     url:`https://api.allorigins.win/raw?url=${encodeURIComponent(y1)}` },
-    { label:'codetabs (1)',       url:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(y1)}` },
-    { label:'thingproxy (1)',     url:`https://thingproxy.freeboard.io/fetch/${y1}` },
-    { label:'cors.sh (1)',        url:`https://proxy.cors.sh/${y1}` },
-    { label:'corsproxy.io (2)',   url:`https://corsproxy.io/?url=${encodeURIComponent(y2)}` },
-    { label:'allorigins (2)',     url:`https://api.allorigins.win/raw?url=${encodeURIComponent(y2)}` },
-    { label:'codetabs (2)',       url:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(y2)}` },
-    { label:'thingproxy (2)',     url:`https://thingproxy.freeboard.io/fetch/${y2}` },
-    { label:'cors.sh (2)',        url:`https://proxy.cors.sh/${y2}` },
+    { label:'corsproxy.io',   url:`https://corsproxy.io/?url=${encodeURIComponent(y1)}` },
+    { label:'allorigins',     url:`https://api.allorigins.win/raw?url=${encodeURIComponent(y1)}` },
+    { label:'codetabs',       url:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(y1)}` },
+    { label:'thingproxy',     url:`https://thingproxy.freeboard.io/fetch/${y1}` },
+    { label:'cors.sh',        url:`https://proxy.cors.sh/${y1}` },
+    { label:'corsproxy.io/2', url:`https://corsproxy.io/?url=${encodeURIComponent(y2)}` },
+    { label:'allorigins/2',   url:`https://api.allorigins.win/raw?url=${encodeURIComponent(y2)}` },
+    { label:'codetabs/2',     url:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(y2)}` },
+    { label:'thingproxy/2',   url:`https://thingproxy.freeboard.io/fetch/${y2}` },
+    { label:'cors.sh/2',      url:`https://proxy.cors.sh/${y2}` },
   ];
 
   let lastErr = '';
@@ -677,42 +796,34 @@ async function fetchYahooData(ticker, range) {
     const { label, url } = proxies[i];
     showStatus(`📥 ${ticker}: Proxy ${i+1}/${proxies.length} (${label})…`, 'loading');
     try {
-      const resp = await fetchWithTimeout(url, { headers: {'Accept':'application/json','Cache-Control':'no-cache'} }, 9000);
+      const resp = await fetchWithTimeout(url, { headers:{'Accept':'application/json','Cache-Control':'no-cache'} }, 9000);
       if (!resp.ok) { lastErr=`HTTP ${resp.status} via ${label}`; continue; }
       const text = await resp.text();
       if (!text) { lastErr='Leere Antwort'; continue; }
-      let data; try { data=JSON.parse(text); } catch(e) { lastErr='JSON-Fehler'; continue; }
-      const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
+      let raw; try { raw=JSON.parse(text); } catch(e) { lastErr='JSON-Fehler'; continue; }
+      const closes = raw?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
       if (!closes || closes.filter(Boolean).length < 10) { lastErr=`Wenig Daten`; continue; }
-      return data;  // ✅ Erfolg
+      return parseYahoo(raw, ticker); // ✅ Erfolg → direkt aufbereitet zurückgeben
     } catch(e) { lastErr = e.name==='AbortError' ? `Timeout (${label})` : e.message; }
   }
-  // Bekannte US-Ticker / ETFs / Indizes → kein Suffix-Hinweis
-  const US_PATTERN = /^[A-Z]{1,5}(-[A-Z])?$/.test(ticker); // z.B. AAPL, SPY, BRK-B
+
+  // ── 3. Alle Quellen gescheitert ───────────────────────────────────────
+  const US_PATTERN = /^[A-Z]{1,5}(-[A-Z])?$/.test(ticker);
   const KNOWN_US = new Set(['SPY','QQQ','IWM','DIA','GLD','SLV','TLT','IEF','BND','VTI','VOO',
-    'AAPL','MSFT','GOOGL','GOOG','AMZN','NVDA','META','TSLA','JPM','BAC','BRK.B',
+    'AAPL','MSFT','GOOGL','GOOG','AMZN','NVDA','META','TSLA','JPM','BAC','BRK-B',
     'XLK','XLF','XLE','XLV','XLU','ARKK','VNQ','HYG','LQD','URTH','EEM','VWO']);
+  const looksNonUS = !KNOWN_US.has(ticker) && (/\d/.test(ticker) || (ticker.length >= 3 && !US_PATTERN));
 
-  // Suffix-Hinweis nur wenn: Ticker enthält Ziffern (z.B. 8002), ODER
-  // er sieht aus wie ein europäischer Ticker (3–6 Buchstaben, nicht in US-Whitelist)
-  // und ist nicht in bekannten US-Tickern
-  const looksNonUS = !KNOWN_US.has(ticker) && (
-    /\d/.test(ticker) ||                          // enthält Ziffer → wahrsch. Asien
-    (ticker.length >= 3 && !US_PATTERN)           // ungewöhnliches Muster
-  );
-
-  let hint = '';
   if (looksNonUS) {
-    hint = `\n💡 Tipp: Nicht-US-Aktien brauchen ein Börsen-Suffix:\n`
-         + `  • ${ticker}.DE (Deutschland/XETRA)  • ${ticker}.MC (Spanien)\n`
-         + `  • ${ticker}.L (London)  • ${ticker}.PA (Paris)  • ${ticker}.T (Tokio)\n`
-         + `  → Vollständige Übersicht im Portfolio-Tab.`;
+    throw new Error(`Ticker „${ticker}" nicht gefunden.\n💡 Nicht-US-Aktien brauchen ein Suffix: ${ticker}.DE / ${ticker}.MC / ${ticker}.L / ${ticker}.T`);
   } else {
-    hint = `\n⚠️ Alle Datenquellen (${proxies.length} Proxies) nicht erreichbar.\n`
-         + `  Bitte 1–2 Minuten warten und erneut versuchen.\n`
-         + `  Letzter Fehler: ${lastErr}`;
+    throw new Error(
+      `Keine Kursdaten für „${ticker}" verfügbar.\n` +
+      `⚠️ Yahoo Finance ist aktuell über alle Proxies nicht erreichbar.\n\n` +
+      `✅ Lösung: Kostenlosen Alpha Vantage API-Key eintragen (oben im gelben Banner).\n` +
+      `   → alphavantage.co/support/#api-key  (30 Sekunden, kostenlos, 25 Abfragen/Tag)`
+    );
   }
-  throw new Error(`Keine Daten für „${ticker}" verfügbar.${hint}`);
 }
 
 function parseYahoo(raw, ticker) {
@@ -798,9 +909,8 @@ async function runSingle() {
   document.getElementById('s-btn').disabled=true;
   showStatus(`📥 Lade Kursdaten für ${ticker}…`,'loading');
   try {
-    const raw=await fetchYahooData(ticker,range);
+    const data=await fetchData(ticker,range);
     showStatus(`📊 Berechne VaR für ${ticker}…`,'loading');
-    const data=parseYahoo(raw,ticker);
     if(data.prices.length<30) throw new Error(`Nur ${data.prices.length} Datenpunkte – anderen Zeitraum wählen.`);
     renderSingle(data, betrag);
     hideStatus();
@@ -831,9 +941,7 @@ async function runPortfolio() {
   try {
     // Alle parallel laden – allSettled damit ALLE Fehler gesammelt werden
     const results = await Promise.allSettled(rows.map(async (r,i) => {
-      showStatus(`📥 Lade ${r.ticker} (${i+1}/${rows.length})…`,'loading');
-      const raw = await fetchYahooData(r.ticker, range);
-      const data = parseYahoo(raw, r.ticker);
+      const data = await fetchData(r.ticker, range);
       if(r.name) data.name = r.name;
       return { ...data, weight: r.weight };
     }));
