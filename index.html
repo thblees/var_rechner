@@ -644,28 +644,48 @@ function showStatus(msg, type='loading') {
 }
 function hideStatus() { document.getElementById('status-bar').className = 'status-bar'; }
 
+// Fetch mit Timeout (ms)
+async function fetchWithTimeout(url, options, ms=9000) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { ...options, signal: ctrl.signal });
+    clearTimeout(id); return r;
+  } catch(e) { clearTimeout(id); throw e; }
+}
+
 async function fetchYahooData(ticker, range) {
   const y1 = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=${range}&events=history`;
   const y2 = `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=${range}&events=history`;
+
+  // 10 Proxies in Reihenfolge – je nach Verfügbarkeit
   const proxies = [
-    `https://corsproxy.io/?url=${encodeURIComponent(y1)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(y1)}`,
-    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(y1)}`,
-    `https://corsproxy.io/?url=${encodeURIComponent(y2)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(y2)}`,
+    { label:'corsproxy.io (1)',   url:`https://corsproxy.io/?url=${encodeURIComponent(y1)}` },
+    { label:'allorigins (1)',     url:`https://api.allorigins.win/raw?url=${encodeURIComponent(y1)}` },
+    { label:'codetabs (1)',       url:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(y1)}` },
+    { label:'thingproxy (1)',     url:`https://thingproxy.freeboard.io/fetch/${y1}` },
+    { label:'cors.sh (1)',        url:`https://proxy.cors.sh/${y1}` },
+    { label:'corsproxy.io (2)',   url:`https://corsproxy.io/?url=${encodeURIComponent(y2)}` },
+    { label:'allorigins (2)',     url:`https://api.allorigins.win/raw?url=${encodeURIComponent(y2)}` },
+    { label:'codetabs (2)',       url:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(y2)}` },
+    { label:'thingproxy (2)',     url:`https://thingproxy.freeboard.io/fetch/${y2}` },
+    { label:'cors.sh (2)',        url:`https://proxy.cors.sh/${y2}` },
   ];
+
   let lastErr = '';
-  for (const url of proxies) {
+  for (let i=0; i<proxies.length; i++) {
+    const { label, url } = proxies[i];
+    showStatus(`📥 ${ticker}: Proxy ${i+1}/${proxies.length} (${label})…`, 'loading');
     try {
-      const resp = await fetch(url, { headers: {'Accept':'application/json','Cache-Control':'no-cache'} });
-      if (!resp.ok) { lastErr=`HTTP ${resp.status}`; continue; }
+      const resp = await fetchWithTimeout(url, { headers: {'Accept':'application/json','Cache-Control':'no-cache'} }, 9000);
+      if (!resp.ok) { lastErr=`HTTP ${resp.status} via ${label}`; continue; }
       const text = await resp.text();
       if (!text) { lastErr='Leere Antwort'; continue; }
       let data; try { data=JSON.parse(text); } catch(e) { lastErr='JSON-Fehler'; continue; }
       const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
-      if (!closes || closes.filter(Boolean).length < 10) { lastErr=`Wenig Daten (${closes?.filter(Boolean).length??0})`; continue; }
-      return data;
-    } catch(e) { lastErr=e.message; }
+      if (!closes || closes.filter(Boolean).length < 10) { lastErr=`Wenig Daten`; continue; }
+      return data;  // ✅ Erfolg
+    } catch(e) { lastErr = e.name==='AbortError' ? `Timeout (${label})` : e.message; }
   }
   // Bekannte US-Ticker / ETFs / Indizes → kein Suffix-Hinweis
   const US_PATTERN = /^[A-Z]{1,5}(-[A-Z])?$/.test(ticker); // z.B. AAPL, SPY, BRK-B
@@ -684,14 +704,15 @@ async function fetchYahooData(ticker, range) {
   let hint = '';
   if (looksNonUS) {
     hint = `\n💡 Tipp: Nicht-US-Aktien brauchen ein Börsen-Suffix:\n`
-         + `  • ${ticker}.DE (Deutschland/XETRA)\n`
-         + `  • ${ticker}.MC (Spanien) · ${ticker}.L (London)\n`
-         + `  • ${ticker}.PA (Paris) · ${ticker}.T (Tokio)\n`
-         + `  Vollständige Übersicht im Portfolio-Tab.`;
-  } else if (lastErr.includes('HTTP') || lastErr.includes('fetch')) {
-    hint = `\n⚠️ Mögliche Ursache: Datenabruf-Dienst vorübergehend nicht erreichbar. Bitte kurz warten und erneut versuchen.`;
+         + `  • ${ticker}.DE (Deutschland/XETRA)  • ${ticker}.MC (Spanien)\n`
+         + `  • ${ticker}.L (London)  • ${ticker}.PA (Paris)  • ${ticker}.T (Tokio)\n`
+         + `  → Vollständige Übersicht im Portfolio-Tab.`;
+  } else {
+    hint = `\n⚠️ Alle Datenquellen (${proxies.length} Proxies) nicht erreichbar.\n`
+         + `  Bitte 1–2 Minuten warten und erneut versuchen.\n`
+         + `  Letzter Fehler: ${lastErr}`;
   }
-  throw new Error(`Ticker „${ticker}" nicht gefunden.${hint}`);
+  throw new Error(`Keine Daten für „${ticker}" verfügbar.${hint}`);
 }
 
 function parseYahoo(raw, ticker) {
