@@ -63,7 +63,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #F0F4F8; color: #
 /* Status */
 .status-bar { padding: 10px 36px; font-size: 13px; display: none; align-items: center; gap: 10px; }
 .status-bar.loading { display: flex; background: #EBF2FB; color: #1B4F72; }
-.status-bar.error   { display: flex; background: #FDEDEC; color: #922B21; }
+.status-bar.error   { display: flex; background: #FDEDEC; color: #922B21; align-items: flex-start; line-height: 1.6; }
 .spinner { width: 16px; height: 16px; border: 3px solid #AED6F1; border-top-color: #1B4F72; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -240,6 +240,17 @@ td:first-child { font-weight: 700; text-align: left; color: #1B2A4A; }
     </tbody>
   </table>
 
+  <div style="background:#EBF5FB; border:1px solid #AED6F1; border-radius:8px; padding:10px 14px; margin-bottom:10px; font-size:12px; color:#1A5276; line-height:1.7;">
+    <strong>🌍 Internationale Aktien?</strong> Yahoo Finance braucht ein Börsen-Suffix –
+    z.B. <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">HOT.DE</code> (Deutschland/XETRA) ·
+    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">ITX.MC</code> (Spanien) ·
+    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">8002.T</code> (Tokio) ·
+    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">SHEL.L</code> (London) ·
+    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">OR.PA</code> (Paris) ·
+    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">NESN.SW</code> (Zürich) ·
+    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">ENI.MI</code> (Mailand)
+  </div>
+
   <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px;">
     <button class="btn-add-row" onclick="addPortfolioRow()">+ Wertpapier hinzufügen</button>
     <div style="font-size:12px; color:#7F8C8D;">
@@ -386,7 +397,7 @@ function showStatus(msg, type='loading') {
   const bar = document.getElementById('status-bar');
   bar.className = 'status-bar ' + type;
   document.getElementById('spinner').style.display = type==='loading' ? 'block' : 'none';
-  document.getElementById('status-text').textContent = msg;
+  document.getElementById('status-text').innerHTML = msg.replace(/\n/g, '<br>');
 }
 function hideStatus() { document.getElementById('status-bar').className = 'status-bar'; }
 
@@ -413,7 +424,17 @@ async function fetchYahooData(ticker, range) {
       return data;
     } catch(e) { lastErr=e.message; }
   }
-  throw new Error(`Keine Daten für "${ticker}" (${lastErr})`);
+  // Smarter Hinweis: kein Punkt im Ticker → könnte Ländersuffix fehlen
+  let hint = '';
+  if (!ticker.includes('.') && !/^\d+$/.test(ticker)) {
+    hint = `\n💡 Nicht-US-Aktien brauchen ein Börsen-Suffix, z.B.:\n`
+         + `  • ${ticker}.DE (Deutschland/XETRA)\n`
+         + `  • ${ticker}.MC (Spanien/Madrid)\n`
+         + `  • ${ticker}.L  (London)\n`
+         + `  • ${ticker}.PA (Paris)\n`
+         + `  • ${ticker}.T  (Tokio)`;
+  }
+  throw new Error(`Ticker „${ticker}" nicht gefunden.${hint}`);
 }
 
 function parseYahoo(raw, ticker) {
@@ -530,14 +551,20 @@ async function runPortfolio() {
   document.getElementById('p-btn').disabled=true;
   showStatus(`📥 Lade Daten für ${rows.length} Positionen…`,'loading');
   try {
-    // Alle parallel laden
-    const fetched = await Promise.all(rows.map(async (r,i) => {
+    // Alle parallel laden – allSettled damit ALLE Fehler gesammelt werden
+    const results = await Promise.allSettled(rows.map(async (r,i) => {
       showStatus(`📥 Lade ${r.ticker} (${i+1}/${rows.length})…`,'loading');
       const raw = await fetchYahooData(r.ticker, range);
       const data = parseYahoo(raw, r.ticker);
       if(r.name) data.name = r.name;
       return { ...data, weight: r.weight };
     }));
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length > 0) {
+      const msgs = failed.map(r => r.reason.message).join('\n\n');
+      throw new Error(msgs);
+    }
+    const fetched = results.map(r => r.value);
 
     showStatus(`📊 Berechne Portfolio-VaR…`,'loading');
     // Gemeinsame Datumsmenge
