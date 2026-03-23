@@ -667,15 +667,29 @@ async function fetchYahooData(ticker, range) {
       return data;
     } catch(e) { lastErr=e.message; }
   }
-  // Smarter Hinweis: kein Punkt im Ticker → könnte Ländersuffix fehlen
+  // Bekannte US-Ticker / ETFs / Indizes → kein Suffix-Hinweis
+  const US_PATTERN = /^[A-Z]{1,5}(-[A-Z])?$/.test(ticker); // z.B. AAPL, SPY, BRK-B
+  const KNOWN_US = new Set(['SPY','QQQ','IWM','DIA','GLD','SLV','TLT','IEF','BND','VTI','VOO',
+    'AAPL','MSFT','GOOGL','GOOG','AMZN','NVDA','META','TSLA','JPM','BAC','BRK.B',
+    'XLK','XLF','XLE','XLV','XLU','ARKK','VNQ','HYG','LQD','URTH','EEM','VWO']);
+
+  // Suffix-Hinweis nur wenn: Ticker enthält Ziffern (z.B. 8002), ODER
+  // er sieht aus wie ein europäischer Ticker (3–6 Buchstaben, nicht in US-Whitelist)
+  // und ist nicht in bekannten US-Tickern
+  const looksNonUS = !KNOWN_US.has(ticker) && (
+    /\d/.test(ticker) ||                          // enthält Ziffer → wahrsch. Asien
+    (ticker.length >= 3 && !US_PATTERN)           // ungewöhnliches Muster
+  );
+
   let hint = '';
-  if (!ticker.includes('.') && !/^\d+$/.test(ticker)) {
-    hint = `\n💡 Nicht-US-Aktien brauchen ein Börsen-Suffix, z.B.:\n`
+  if (looksNonUS) {
+    hint = `\n💡 Tipp: Nicht-US-Aktien brauchen ein Börsen-Suffix:\n`
          + `  • ${ticker}.DE (Deutschland/XETRA)\n`
-         + `  • ${ticker}.MC (Spanien/Madrid)\n`
-         + `  • ${ticker}.L  (London)\n`
-         + `  • ${ticker}.PA (Paris)\n`
-         + `  • ${ticker}.T  (Tokio)`;
+         + `  • ${ticker}.MC (Spanien) · ${ticker}.L (London)\n`
+         + `  • ${ticker}.PA (Paris) · ${ticker}.T (Tokio)\n`
+         + `  Vollständige Übersicht im Portfolio-Tab.`;
+  } else if (lastErr.includes('HTTP') || lastErr.includes('fetch')) {
+    hint = `\n⚠️ Mögliche Ursache: Datenabruf-Dienst vorübergehend nicht erreichbar. Bitte kurz warten und erneut versuchen.`;
   }
   throw new Error(`Ticker „${ticker}" nicht gefunden.${hint}`);
 }
