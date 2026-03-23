@@ -49,6 +49,39 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #F0F4F8; color: #
 .btn-del { background: none; border: none; color: #E74C3C; cursor: pointer; font-size: 16px; padding: 4px 8px; opacity: 0.6; }
 .btn-del:hover { opacity: 1; }
 
+/* Portfolio Speichern/Laden */
+.btn-save { padding: 7px 14px; background: #E8F8F5; border: 1px solid #A9DFBF; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; color: #1E8449; white-space: nowrap; }
+.btn-save:hover { background: #A9DFBF; }
+.btn-file-lbl { padding: 7px 14px; background: #FEF9E7; border: 1px solid #F9E79F; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; color: #7D6608; white-space: nowrap; display: inline-block; }
+.btn-file-lbl:hover { background: #F9E79F; }
+.saved-port { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.saved-port-item { display: flex; align-items: center; gap: 3px; background: #EBF5FB; border: 1px solid #AED6F1; border-radius: 6px; padding: 3px 5px 3px 9px; font-size: 12px; }
+.saved-port-item .sp-name { color: #1B2A4A; font-weight: 600; }
+.saved-port-item .sp-count { color: #aaa; font-size: 11px; margin-left: 2px; }
+.saved-port-item button { background: none; border: none; cursor: pointer; font-size: 13px; padding: 0 3px; line-height: 1; }
+.saved-port-item .sp-load { color: #1B4F72; }
+.saved-port-item .sp-del { color: #E74C3C; opacity: 0.55; }
+.saved-port-item .sp-del:hover { opacity: 1; }
+
+/* PDF Export */
+.pdf-export-row { max-width: 1100px; margin: 0 auto; padding: 4px 18px 10px; display: none; justify-content: flex-end; }
+.pdf-export-row.visible { display: flex; }
+.btn-pdf { padding: 8px 18px; background: #F4ECF7; border: 1px solid #C39BD3; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; color: #6C3483; }
+.btn-pdf:hover { background: #D2B4DE; }
+
+@media print {
+  body { background: white !important; }
+  .header p { display: none; }
+  .mode-tabs, .input-panel, .status-bar, .welcome,
+  .pdf-export-row, .opt-controls, .no-print { display: none !important; }
+  .results { display: block !important; max-width: 100% !important; padding: 10px 0 !important; }
+  .kpi-card { box-shadow: none !important; border: 1px solid #ddd !important; break-inside: avoid; }
+  .card { box-shadow: none !important; border: 1px solid #ddd !important; }
+  canvas { max-width: 100% !important; }
+  .chart-box { break-inside: avoid; page-break-inside: avoid; }
+  @page { margin: 12mm 15mm; size: A4; }
+}
+
 /* Beispiel-Chips */
 .chips { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
 .chips span { font-size: 11px; color: #7F8C8D; }
@@ -240,15 +273,120 @@ td:first-child { font-weight: 700; text-align: left; color: #1B2A4A; }
     </tbody>
   </table>
 
-  <div style="background:#EBF5FB; border:1px solid #AED6F1; border-radius:8px; padding:10px 14px; margin-bottom:10px; font-size:12px; color:#1A5276; line-height:1.7;">
-    <strong>🌍 Internationale Aktien?</strong> Yahoo Finance braucht ein Börsen-Suffix –
-    z.B. <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">HOT.DE</code> (Deutschland/XETRA) ·
-    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">ITX.MC</code> (Spanien) ·
-    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">8002.T</code> (Tokio) ·
-    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">SHEL.L</code> (London) ·
-    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">OR.PA</code> (Paris) ·
-    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">NESN.SW</code> (Zürich) ·
-    <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">ENI.MI</code> (Mailand)
+  <div style="border:1px solid #AED6F1; border-radius:8px; margin-bottom:12px; overflow:hidden; font-size:12px;">
+    <div onclick="var b=this.parentElement.querySelector('.sfx-body'); var open=b.style.display!=='none'; b.style.display=open?'none':'block'; this.querySelector('.sfx-arr').textContent=open?'▶':'▼';"
+         style="background:#EBF5FB; color:#1A5276; padding:9px 14px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none;">
+      <span><strong>🌍 Internationale Aktien – Börsen-Suffixe</strong> <span style="font-weight:normal;opacity:.75;">(zum Aufklappen klicken)</span></span>
+      <span class="sfx-arr" style="font-size:11px;">▶</span>
+    </div>
+    <div class="sfx-body" style="display:none; background:#F4F9FD; padding:12px 14px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px;">
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇩🇪 Deutschland</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.DE</code> XETRA &nbsp;<span style="color:#aaa">SAP.DE</span></div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.F</code>&nbsp; Frankfurt &nbsp;<span style="color:#aaa">BMW.F</span></div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.MU</code> München</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.BE</code> Berlin · <code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.SG</code> Stuttgart</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇬🇧 Großbritannien</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.L</code>&nbsp; London LSE &nbsp;<span style="color:#aaa">SHEL.L</span></div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.IL</code> London (Pence)</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇫🇷 Frankreich</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.PA</code> Euronext Paris &nbsp;<span style="color:#aaa">OR.PA</span></div>
+          <div style="color:#aaa;font-size:11px;">LVMH→MC.PA · TotalEnergies→TTE.PA</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇳🇱 Niederlande</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.AS</code> Euronext Amsterdam &nbsp;<span style="color:#aaa">ASML.AS</span></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇧🇪 Belgien</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.BR</code> Euronext Brüssel &nbsp;<span style="color:#aaa">UCB.BR</span></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇵🇹 Portugal</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.LS</code> Euronext Lissabon &nbsp;<span style="color:#aaa">EDP.LS</span></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇪🇸 Spanien</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.MC</code> Madrid Bolsa &nbsp;<span style="color:#aaa">ITX.MC</span></div>
+          <div style="color:#aaa;font-size:11px;">Santander→SAN.MC · Iberdrola→IBE.MC</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇮🇹 Italien</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.MI</code> Borsa Italiana &nbsp;<span style="color:#aaa">ENI.MI</span></div>
+          <div style="color:#aaa;font-size:11px;">Ferrari→RACE.MI · Stellantis→STLAM.MI</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇨🇭 Schweiz</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.SW</code> SIX Swiss Exchange &nbsp;<span style="color:#aaa">NESN.SW</span></div>
+          <div style="color:#aaa;font-size:11px;">Novartis→NOVN.SW · Roche→ROG.SW</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇦🇹 Österreich</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.VI</code> Wiener Börse &nbsp;<span style="color:#aaa">OMV.VI</span></div>
+          <div style="color:#aaa;font-size:11px;">Erste Group→EBS.VI · Verbund→VER.VI</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇸🇪 Schweden</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.ST</code> Nasdaq Stockholm &nbsp;<span style="color:#aaa">VOLV-B.ST</span></div>
+          <div style="color:#aaa;font-size:11px;">H&amp;M→HM-B.ST · Ericsson→ERIC-B.ST</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇩🇰 Dänemark</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.CO</code> Nasdaq Kopenhagen &nbsp;<span style="color:#aaa">NOVO-B.CO</span></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇳🇴 Norwegen</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.OL</code> Oslo Børs &nbsp;<span style="color:#aaa">EQNR.OL</span></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇫🇮 Finnland</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.HE</code> Nasdaq Helsinki &nbsp;<span style="color:#aaa">NOKIA.HE</span></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇵🇱 Polen</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.WA</code> Warschau WSE &nbsp;<span style="color:#aaa">PKO.WA</span></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #D6EAF8;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#1B4F72;margin-bottom:4px;">🇬🇷 Griechenland</div>
+          <div><code style="background:#D6EAF8;padding:1px 4px;border-radius:3px">.AT</code> Athen ATHEX &nbsp;<span style="color:#aaa">OTE.AT</span></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #FAD7A0;border-left:3px solid #E67E22;border-radius:6px;padding:8px 10px;">
+          <div style="font-weight:700;color:#784212;margin-bottom:4px;">🌏 Asien &amp; Welt</div>
+          <div><code style="background:#FDEBD0;padding:1px 4px;border-radius:3px">.T</code>&nbsp; Tokio TSE &nbsp;<span style="color:#aaa">8002.T</span></div>
+          <div><code style="background:#FDEBD0;padding:1px 4px;border-radius:3px">.HK</code> Hongkong &nbsp;<span style="color:#aaa">0700.HK</span></div>
+          <div><code style="background:#FDEBD0;padding:1px 4px;border-radius:3px">.AX</code> Australien &nbsp;<span style="color:#aaa">BHP.AX</span></div>
+          <div><code style="background:#FDEBD0;padding:1px 4px;border-radius:3px">.TO</code> Toronto &nbsp;<span style="color:#aaa">RY.TO</span></div>
+          <div><code style="background:#FDEBD0;padding:1px 4px;border-radius:3px">.SA</code> São Paulo &nbsp;<span style="color:#aaa">PETR4.SA</span></div>
+        </div>
+
+      </div>
+      <div style="margin-top:10px;padding:8px 10px;background:#FEF9E7;border:1px solid #F9E79F;border-radius:6px;color:#7D6608;font-size:11px;">
+        💡 <strong>US-Aktien (NYSE/NASDAQ) brauchen kein Suffix</strong> – einfach <code style="background:#FDEBD0;padding:1px 3px;border-radius:3px">AAPL</code>, <code style="background:#FDEBD0;padding:1px 3px;border-radius:3px">MSFT</code>, <code style="background:#FDEBD0;padding:1px 3px;border-radius:3px">SPY</code> direkt eingeben.
+        Unbekannter Ticker? Auf <a href="https://finance.yahoo.com" target="_blank" style="color:#7D6608;font-weight:600;">finance.yahoo.com</a> suchen → den Ticker aus der URL übernehmen.
+      </div>
+    </div>
   </div>
 
   <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px;">
@@ -264,6 +402,19 @@ td:first-child { font-weight: 700; text-align: left; color: #1B2A4A; }
     <div class="chip" onclick="loadPreset('etf3')">ETF-Dreieck (World/EM/Bonds)</div>
     <div class="chip" onclick="loadPreset('tech4')">Tech-Giganten (AAPL/MSFT/NVDA/GOOG)</div>
     <div class="chip" onclick="loadPreset('balanced')">Klassisch 60/40 (SPY + TLT)</div>
+  </div>
+
+  <!-- Portfolio Speichern / Laden -->
+  <div style="margin-top:14px; padding-top:12px; border-top:1px solid #EBF0F7;">
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+      <span style="font-size:11px; font-weight:700; color:#5D6D7E; text-transform:uppercase; letter-spacing:.4px;">💾 Portfolio-Speicher</span>
+      <button class="btn-save" onclick="savePortfolio()">💾 Speichern</button>
+      <button class="btn-save" onclick="exportPortfolioFile()">⬇ Als JSON-Datei</button>
+      <label class="btn-file-lbl">📁 Aus Datei laden<input type="file" accept=".json" onchange="importPortfolioFile(event)" style="display:none"></label>
+    </div>
+    <div id="saved-portfolios-list" class="saved-port">
+      <span style="font-size:11px; color:#aaa;">Noch keine gespeicherten Portfolios.</span>
+    </div>
   </div>
 </div>
 
@@ -298,10 +449,100 @@ td:first-child { font-weight: 700; text-align: left; color: #1B2A4A; }
   </div>
 </div>
 
+<!-- PDF Export Button -->
+<div class="pdf-export-row no-print" id="pdf-export-row">
+  <button class="btn-pdf" onclick="window.print()">📄 Als PDF exportieren / Drucken</button>
+</div>
+
 <!-- Ergebnisse -->
 <div class="results" id="results"></div>
 
 <script>
+// ═══════════════════════════════════════════════════════════════════════════
+// PORTFOLIO SPEICHERN / LADEN
+// ═══════════════════════════════════════════════════════════════════════════
+const PORTFOLIO_KEY = 'var_saved_portfolios';
+
+function getSavedPortfolios() {
+  try { return JSON.parse(localStorage.getItem(PORTFOLIO_KEY) || '{}'); } catch(e) { return {}; }
+}
+
+function savePortfolio() {
+  const rows = getPortfolioRows().filter(r => r.ticker);
+  if (rows.length < 1) { alert('Portfolio ist leer – bitte zuerst Wertpapiere eintragen.'); return; }
+  const name = prompt('Name für dieses Portfolio:', 'Mein Portfolio');
+  if (!name || !name.trim()) return;
+  const saved = getSavedPortfolios();
+  saved[name.trim()] = rows;
+  localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(saved));
+  renderSavedPortfolios();
+}
+
+function loadSavedPortfolio(name) {
+  const saved = getSavedPortfolios();
+  const rows = saved[name];
+  if (!rows) return;
+  document.getElementById('p-tbody').innerHTML = '';
+  rows.forEach(r => addPortfolioRow(r.ticker || '', r.name || '', r.weight || 0));
+  updateWeights();
+}
+
+function deleteSavedPortfolio(name) {
+  if (!confirm(`Portfolio „${name}" löschen?`)) return;
+  const saved = getSavedPortfolios();
+  delete saved[name];
+  localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(saved));
+  renderSavedPortfolios();
+}
+
+function renderSavedPortfolios() {
+  const saved = getSavedPortfolios();
+  const container = document.getElementById('saved-portfolios-list');
+  const names = Object.keys(saved);
+  if (names.length === 0) {
+    container.innerHTML = '<span style="font-size:11px; color:#aaa;">Noch keine gespeicherten Portfolios.</span>';
+    return;
+  }
+  container.innerHTML = names.map(name => {
+    const safe = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<div class="saved-port-item">
+      <span class="sp-name">${name}</span>
+      <span class="sp-count">(${saved[name].length} Pos.)</span>
+      <button class="sp-load" onclick="loadSavedPortfolio('${safe}')" title="Portfolio laden">📂</button>
+      <button class="sp-del"  onclick="deleteSavedPortfolio('${safe}')" title="Löschen">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function exportPortfolioFile() {
+  const rows = getPortfolioRows().filter(r => r.ticker);
+  if (rows.length < 1) { alert('Portfolio ist leer.'); return; }
+  const name = (prompt('Dateiname:', 'mein_portfolio') || 'mein_portfolio').replace(/\.json$/,'');
+  const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importPortfolioFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const rows = JSON.parse(e.target.result);
+      if (!Array.isArray(rows)) throw new Error('Ungültiges Format – erwartet ein JSON-Array.');
+      document.getElementById('p-tbody').innerHTML = '';
+      rows.forEach(r => addPortfolioRow(r.ticker || '', r.name || '', r.weight || 0));
+      updateWeights();
+    } catch(err) { alert('Fehler beim Laden: ' + err.message); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MODUS-SWITCHING
 // ═══════════════════════════════════════════════════════════════════════════
@@ -314,6 +555,7 @@ function switchMode(m) {
   document.getElementById('panel-portfolio').style.display = m==='portfolio' ? 'block' : 'none';
   document.getElementById('results').style.display = 'none';
   document.getElementById('welcome').style.display = 'block';
+  document.getElementById('pdf-export-row').classList.remove('visible');
   hideStatus();
 }
 
@@ -389,6 +631,7 @@ function loadPreset(name) {
 addPortfolioRow('SPY','S&P 500',40);
 addPortfolioRow('QQQ','NASDAQ',35);
 addPortfolioRow('GLD','Gold',25);
+renderSavedPortfolios();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DATENABRUF
@@ -913,6 +1156,7 @@ function renderSingle(data, inv) {
   destroyCharts();
   container.innerHTML=html;
   container.style.display='block';
+  document.getElementById('pdf-export-row').classList.add('visible');
 
   charts.var   = drawVarChart('c-var', vt);
   charts.dist  = drawDistChart('c-dist', rets);
@@ -1071,6 +1315,7 @@ function renderPortfolio(assets, allRets, portRets, betrag, commonDates) {
   destroyCharts();
   container.innerHTML=html;
   container.style.display='block';
+  document.getElementById('pdf-export-row').classList.add('visible');
 
   // Charts zeichnen
   charts.pvar  = drawVarChart('c-pvar', portVt);
