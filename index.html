@@ -200,18 +200,18 @@ td:first-child { font-weight: 700; text-align: left; color: #1B2A4A; }
 <div id="apikey-banner" style="background:#FEF9E7; border-bottom:1px solid #F9E79F; padding:8px 36px; font-size:12px; color:#7D6608; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
   <span>🔑 <strong>Datenquelle:</strong> <span id="apikey-status-label">Yahoo Finance (Proxies)</span></span>
   <span style="opacity:.6">|</span>
-  <span>Für zuverlässigen Datenabruf: <strong>Alpha Vantage API-Key</strong> empfohlen (kostenlos) →
-    <a href="https://www.alphavantage.co/support/#api-key" target="_blank" style="color:#7D6608;font-weight:700;">alphavantage.co</a>
+  <span>Für zuverlässigen Datenabruf: <strong>Twelve Data API-Key</strong> empfohlen (kostenlos, 800 Abfragen/Tag) →
+    <a href="https://twelvedata.com/pricing" target="_blank" style="color:#7D6608;font-weight:700;">twelvedata.com</a>
   </span>
   <button onclick="toggleApiKeyInput()" style="padding:3px 10px;background:#F9E79F;border:1px solid #D4AC0D;border-radius:5px;font-size:12px;cursor:pointer;font-weight:600;">⚙️ Key eingeben</button>
 </div>
 <div id="apikey-input-row" style="display:none; background:#FFFDE7; border-bottom:1px solid #F9E79F; padding:10px 36px; gap:10px; align-items:center; flex-wrap:wrap;">
-  <label style="font-size:12px;font-weight:700;color:#5D6D7E;">Alpha Vantage API-Key:</label>
-  <input id="apikey-field" type="text" placeholder="z.B. ABC123DEF456" maxlength="50"
-    style="padding:7px 12px;border:2px solid #DDE3ED;border-radius:6px;font-size:13px;width:260px;font-family:monospace;" />
+  <label style="font-size:12px;font-weight:700;color:#5D6D7E;">Twelve Data API-Key:</label>
+  <input id="apikey-field" type="text" placeholder="z.B. abc123def456abc123def456abc123de" maxlength="60"
+    style="padding:7px 12px;border:2px solid #DDE3ED;border-radius:6px;font-size:13px;width:320px;font-family:monospace;" />
   <button onclick="saveApiKey()" style="padding:7px 16px;background:#1B2A4A;color:white;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">💾 Speichern</button>
   <button onclick="clearApiKey()" style="padding:7px 12px;background:#FDEDEC;color:#922B21;border:1px solid #FADBD8;border-radius:6px;font-size:12px;cursor:pointer;">Löschen</button>
-  <span style="font-size:11px;color:#7F8C8D;">Schlüssel wird lokal im Browser gespeichert. Kostenlos: 25 Abfragen/Tag.</span>
+  <span style="font-size:11px;color:#7F8C8D;">Schlüssel wird lokal im Browser gespeichert. Kostenlos: 800 Abfragen/Tag · Key holen: <a href="https://twelvedata.com/account/api-keys" target="_blank" style="color:#7D6608;">twelvedata.com/account/api-keys</a></span>
 </div>
 
 <!-- Modus-Tabs -->
@@ -477,9 +477,9 @@ td:first-child { font-weight: 700; text-align: left; color: #1B2A4A; }
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
-// API-KEY VERWALTUNG (Alpha Vantage)
+// API-KEY VERWALTUNG (Twelve Data)
 // ═══════════════════════════════════════════════════════════════════════════
-const AV_KEY_STORAGE = 'var_alphavantage_key';
+const AV_KEY_STORAGE = 'var_twelvedata_key';
 
 function getApiKey() {
   return localStorage.getItem(AV_KEY_STORAGE) || '';
@@ -496,7 +496,7 @@ function saveApiKey() {
   localStorage.setItem(AV_KEY_STORAGE, key);
   updateApiKeyLabel();
   document.getElementById('apikey-input-row').style.display = 'none';
-  alert('✅ API-Key gespeichert! Daten werden ab jetzt über Alpha Vantage geladen.');
+  alert('✅ API-Key gespeichert! Daten werden ab jetzt über Twelve Data geladen.');
 }
 function clearApiKey() {
   if (!confirm('API-Key löschen? Es wird dann wieder versucht, Yahoo Finance zu nutzen.')) return;
@@ -509,7 +509,7 @@ function updateApiKeyLabel() {
   const lbl = document.getElementById('apikey-status-label');
   const banner = document.getElementById('apikey-banner');
   if (key) {
-    lbl.textContent = '✅ Alpha Vantage (aktiv)';
+    lbl.textContent = '✅ Twelve Data (aktiv)';
     lbl.style.color = '#1E8449';
     banner.style.background = '#EAFAF1';
     banner.style.borderColor = '#A9DFBF';
@@ -523,48 +523,53 @@ function updateApiKeyLabel() {
   }
 }
 
-// Alpha Vantage: range-String (z.B. "5y") → Ausgabegröße
-function avOutputSize(range) {
-  return (range === '1y' || range === '2y') ? 'compact' : 'full';
+// Twelve Data: range-String → outputsize (Handelstage)
+function tdOutputSize(range) {
+  const map = { '1y': 260, '2y': 520, '3y': 780, '5y': 1300 };
+  return map[range] || 1300;
 }
 
-// Alpha Vantage API aufrufen und in internes Format konvertieren
-async function fetchAlphaVantage(ticker, range) {
+// Twelve Data API aufrufen und in internes Format konvertieren
+async function fetchTwelveData(ticker, range) {
   const key = getApiKey();
   if (!key) return null;
-  const size = avOutputSize(range);
-  const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${ticker}&outputsize=${size}&apikey=${key}`;
-  showStatus(`📥 ${ticker}: Lade via Alpha Vantage…`, 'loading');
+  const outputsize = tdOutputSize(range);
+  // Ticker-Mapping: Twelve Data nutzt andere Suffixe als Yahoo Finance bei manchen Börsen
+  const url = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(ticker)}&interval=1day&outputsize=${outputsize}&apikey=${key}&dp=4`;
+  showStatus(`📥 ${ticker}: Lade via Twelve Data…`, 'loading');
   try {
-    const resp = await fetchWithTimeout(url, { headers: {'Accept':'application/json'} }, 15000);
+    const resp = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 15000);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = await resp.json();
-    // Fehlercodes von Alpha Vantage prüfen
-    if (json['Note'])        throw new Error('Alpha Vantage Tageslimit erreicht (25 Abfragen/Tag). Bitte morgen wieder versuchen oder API-Key upgraden.');
-    if (json['Information']) throw new Error('Alpha Vantage: ' + json['Information']);
-    if (json['Error Message']) throw new Error('Alpha Vantage: Ticker „' + ticker + '" nicht gefunden.');
-    const ts = json['Time Series (Daily)'];
-    if (!ts) throw new Error('Alpha Vantage: Keine Daten für „' + ticker + '".');
 
-    // Datumsfilter je nach range
-    const now = new Date();
-    const cutoff = new Date(now);
-    const rangeMap = { '1y':1,'2y':2,'3y':3,'5y':5 };
-    cutoff.setFullYear(now.getFullYear() - (rangeMap[range] || 5));
+    // Twelve Data Fehlercodes prüfen
+    if (json.status === 'error') {
+      const code = json.code || 0;
+      if (code === 401 || code === 403) throw new Error('Twelve Data: Ungültiger API-Key. Bitte Key überprüfen.');
+      if (code === 429)                throw new Error('Twelve Data: Rate-Limit erreicht (8 Abfragen/Minute). Bitte kurz warten.');
+      throw new Error('Twelve Data: ' + (json.message || 'Unbekannter Fehler für „' + ticker + '"'));
+    }
+    if (!json.values || !Array.isArray(json.values) || json.values.length === 0) {
+      throw new Error(`Twelve Data: Keine Daten für „${ticker}". Ticker prüfen (z.B. SAP statt SAP.DE für XETRA).`);
+    }
 
+    // Twelve Data liefert neueste Daten zuerst → umkehren
+    const values = [...json.values].reverse();
     const dates = [], prices = [];
-    Object.keys(ts).sort().forEach(dt => {
-      if (new Date(dt) >= cutoff) {
-        dates.push(dt);
-        prices.push(parseFloat(ts[dt]['5. adjusted close']));
+    values.forEach(v => {
+      const p = parseFloat(v.close);
+      if (v.datetime && p > 0) {
+        dates.push(v.datetime.substring(0, 10));
+        prices.push(p);
       }
     });
+
     if (prices.length < 30) throw new Error(`Zu wenig Daten für „${ticker}" (${prices.length} Tage).`);
 
-    // Meta-Daten aus Yahoo-Format simulieren (für parseYahoo-Kompatibilität)
-    // → Wir geben direkt das aufbereitete Objekt zurück, kein Yahoo-Format nötig
-    const name = json['Meta Data']?.['2. Symbol'] || ticker;
-    return { ticker: ticker.toUpperCase(), name, currency: 'USD', prices, dates };
+    const meta = json.meta || {};
+    const name = meta.name || meta.symbol || ticker.toUpperCase();
+    const currency = meta.currency || 'USD';
+    return { ticker: ticker.toUpperCase(), name, currency, prices, dates };
   } catch(e) {
     throw new Error(e.message);
   }
@@ -767,12 +772,12 @@ async function fetchWithTimeout(url, options, ms=9000) {
   } catch(e) { clearTimeout(id); throw e; }
 }
 
-// Zentrale Fetch-Funktion: Alpha Vantage (wenn Key vorhanden) → Yahoo Proxies
+// Zentrale Fetch-Funktion: Twelve Data (wenn Key vorhanden) → Yahoo Proxies
 async function fetchData(ticker, range) {
-  // ── 1. Alpha Vantage (zuverlässig, direkt, kein Proxy nötig) ──────────
+  // ── 1. Twelve Data (zuverlässig, direkt, kein Proxy nötig) ───────────
   if (getApiKey()) {
-    const avData = await fetchAlphaVantage(ticker, range);
-    if (avData) return avData; // bereits aufbereitet, direkt nutzbar
+    const tdData = await fetchTwelveData(ticker, range);
+    if (tdData) return tdData; // bereits aufbereitet, direkt nutzbar
   }
 
   // ── 2. Yahoo Finance über CORS-Proxies (Fallback) ─────────────────────
@@ -820,8 +825,8 @@ async function fetchData(ticker, range) {
     throw new Error(
       `Keine Kursdaten für „${ticker}" verfügbar.\n` +
       `⚠️ Yahoo Finance ist aktuell über alle Proxies nicht erreichbar.\n\n` +
-      `✅ Lösung: Kostenlosen Alpha Vantage API-Key eintragen (oben im gelben Banner).\n` +
-      `   → alphavantage.co/support/#api-key  (30 Sekunden, kostenlos, 25 Abfragen/Tag)`
+      `✅ Lösung: Kostenlosen Twelve Data API-Key eintragen (oben im gelben Banner).\n` +
+      `   → twelvedata.com/account/api-keys  (kostenlos, 800 Abfragen/Tag)`
     );
   }
 }
